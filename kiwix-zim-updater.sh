@@ -945,18 +945,19 @@ main() {
     MatchedDate="$(zim_date "$MatchingFileName")"
     LocalDate="$(zim_date "$FileName")"
 
-    FileTooSmall=0
-    [[ $MIN_SIZE -gt 0 ]] && [[ $MatchingSize -lt $MIN_SIZE ]] && FileTooSmall=1
-    FileTooLarge=0
-    [[ $MAX_SIZE -gt 0 ]] && [[ $MatchingSize -gt $MAX_SIZE ]] && FileTooLarge=1
-    FileSizeAcceptable=0
-    [ $FileTooSmall -eq 0 ] && [ $FileTooLarge -eq 0 ] && FileSizeAcceptable=1
+    # The -n/-x limit the catalog size breaks, e.g. "minimum: 1.0Gi"; empty when the size is acceptable
+    SizeLimit=""
+    if [[ $MIN_SIZE -gt 0 ]] && [[ $MatchingSize -lt $MIN_SIZE ]]; then
+      SizeLimit="minimum: $(numfmt --to=iec-i "$MIN_SIZE")"
+    elif [[ $MAX_SIZE -gt 0 ]] && [[ $MatchingSize -gt $MAX_SIZE ]]; then
+      SizeLimit="maximum: $(numfmt --to=iec-i "$MAX_SIZE")"
+    fi
 
     # A locked ZIM is an interrupted download to finish. With -f only the current catalog version can be finished; an
     # outdated one is verified against its own checksum like any other outdated ZIM below. The -n/-x limits apply to
     # finishing it too: outside them it is left alone (and kept) for a run that allows its size.
     if [[ -f "$ZIMPath.~lock.$FileName" ]] && { [[ $VERIFY_LIBRARY -eq 0 ]] || [[ "$MatchingFileName" == "$FileName" ]]; }; then
-      if [[ $FileSizeAcceptable -eq 0 ]]; then
+      if [[ -n "$SizeLimit" ]]; then
         LocalActionArray+=("$ACT_NONE")
         echo -e "${YELLOW_REGULAR}    Incomplete download detected, but $(numfmt --to=iec-i "$MatchingSize") is outside the -n/-x size limits. Left as it is.${CLEAR}\n"
         echo "Incomplete download of $FileName left as it is: outside the -n/-x size limits" >>"$LOG_FILE"
@@ -968,14 +969,9 @@ main() {
       continue
     fi
 
-    if [ $VERIFY_LIBRARY -eq 1 ] && [ $FileSizeAcceptable -eq 0 ]; then
-      if [ $FileTooSmall -eq 1 ]; then
-        LocalActionArray+=("$ACT_NONE")
-        echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Verification skipped due to file size (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
-      elif [ $FileTooLarge -eq 1 ]; then
-        LocalActionArray+=("$ACT_NONE")
-        echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Verification skipped due to file size (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
-      fi
+    if [[ $VERIFY_LIBRARY -eq 1 ]] && [[ -n "$SizeLimit" ]]; then
+      LocalActionArray+=("$ACT_NONE")
+      echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Verification skipped due to file size ($SizeLimit, download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
     elif [[ "$MatchingFileName" == "$FileName" ]]; then
       if [ $VERIFY_LIBRARY -eq 1 ]; then
         LocalActionArray+=("$ACT_UPDATE")
@@ -1007,12 +1003,9 @@ main() {
           fi
         fi
       else
-        if [ $FileTooSmall -eq 1 ]; then
+        if [[ -n "$SizeLimit" ]]; then
           LocalActionArray+=("$ACT_NONE")
-          echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Update skipped (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
-        elif [ $FileTooLarge -eq 1 ]; then
-          LocalActionArray+=("$ACT_NONE")
-          echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Update skipped (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+          echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Update skipped ($SizeLimit, download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
         elif ! zim_is_newer "$MatchedDate" "$LocalDate"; then
           LocalActionArray+=("$ACT_NONE")
           echo "    ✗ No new update"
