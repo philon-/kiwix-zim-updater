@@ -1086,26 +1086,24 @@ main() {
       # In -f mode a file that was not (re-)downloaded has already been verified above
       if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
         echo -e "${BLUE_REGULAR}    Calculating checksum for : $NewZIMPath${CLEAR}"
-        if [[ $(du -b "$NewZIMPath" 2>/dev/null | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
+        # The size was already verified above for every real download; the checksum is what -c adds
+        if ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]]; then
+          # -c promises a checksum-verified replacement: without a published sha256 the old ZIM must stay
           if [[ $DEBUG -eq 0 ]]; then
-            echo -e "${RED_BOLD}    ✗ Status : File size verification failed, removing corrupt file${CLEAR}"
-            echo "✗ Status : File size verification failed, removing corrupt file" >>"$LOG_FILE"
-            rm "$NewZIMPath"
+            echo -e "${RED_BOLD}    ✗ No valid sha256 published for $NewZIM, cannot verify its checksum. Old ZIM kept.${CLEAR}"
+            echo "✗ No valid sha256 published for $NewZIM, cannot verify its checksum. Old ZIM kept." >>"$LOG_FILE"
+            DownloadFailed=1
           else
-            echo -e "${GREEN_BOLD}    ✓ *** Simulated *** Checksum passed${CLEAR}"
+            echo -e "${YELLOW_BOLD}    *** Simulated *** No valid sha256 published for $NewZIM, the checksum could not be verified${CLEAR}"
           fi
-        elif [[ ${#ExpectedHash} -ne 64 ]]; then
-          echo -e "${YELLOW_BOLD}    This hash doesn't look quite right...skipping${CLEAR}"
-        elif [[ $DEBUG -eq 0 ]] && ! hash_matches "$NewZIM" "$ExpectedHash"; then
+        elif [[ $DEBUG -eq 1 ]]; then
+          echo -e "${GREEN_BOLD}    ✓ *** Simulated *** Checksum passed${CLEAR}"
+        elif ! hash_matches "$NewZIM" "$ExpectedHash"; then
           echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt file${CLEAR}"
           rm "$NewZIMPath"
           DownloadFailed=1
         else
-          if [[ $DEBUG -eq 0 ]]; then
-            echo -e "${GREEN_BOLD}    ✓ Checksum passed${CLEAR}"
-          else
-            echo -e "${GREEN_BOLD}    ✓ *** Simulated *** Checksum passed${CLEAR}"
-          fi
+          echo -e "${GREEN_BOLD}    ✓ Checksum passed${CLEAR}"
         fi
         #            rm "$NewZIMPath.sha256"
         #            rm "$LockFilePath"
