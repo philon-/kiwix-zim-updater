@@ -1113,10 +1113,10 @@ main() {
       echo >> "$LOG_FILE"
       [[ $DownloadFailed -eq 1 ]] && echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
       [[ $DownloadFailed -eq 1 ]] && AnyDownloadFailed=1
-      # A partial download (shorter than expected) can be resumed with wget -c next run. A file that failed its
-      # checksum is already gone, and one that is too large cannot be resumed: leave those to the cleanup below.
+      # An interrupted download (not larger than expected) is resumed with wget -c next run, which also just confirms a
+      # file that is already complete. One that failed its checksum is gone; one that is too large cannot be resumed.
       if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ -f "$LockFilePath" ]] && [[ -f "$NewZIMPath" ]] && \
-        ! { [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -ge $ExpectedSize ]]; }; then
+        ! { [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -gt $ExpectedSize ]]; }; then
         ResumableLocks+=("$LockFilePath")
       fi
 

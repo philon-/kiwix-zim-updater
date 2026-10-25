@@ -36,3 +36,29 @@ keep_copy() {
   assert_success
   assert_output --partial 'the checksum could not be verified'
 }
+
+@test "R2: an intact only copy with a stale lock survives a transient failure and is finished next run" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_sha256 "$W"
+  touch "$ZIMS/.~lock.$W"
+  FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
+  assert_failure 1
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ -f "$ZIMS/$W.sha256" ]]
+  [[ -f "$ZIMS/.~lock.$W" ]]
+  run_updater -d "$ZIMS"
+  assert_success
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
+}
+
+@test "R2: a complete new download with a stale lock is kept after a transient failure (old kept too)" {
+  make_local_zim "$WOLD"
+  keep_copy "$WOLD"
+  cp "$(remote_file "$WREMOTE")" "$ZIMS/$W"
+  touch "$ZIMS/.~lock.$W"
+  FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
+  assert_failure 1
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+}
