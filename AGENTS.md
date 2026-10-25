@@ -14,9 +14,15 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 |---|---|
 | `kiwix-zim-updater.sh` | The script. |
 | `test/*.bats` | bats-core test suites. |
+| `test/cli.bats`, `test/update_detection.bats`, `test/download.bats`, `test/verify.bats` | Characterization tests that pin the behaviour of the script. |
+| `test/known_bugs.bats` | One regression test per review finding (F, H, M, N IDs). |
+| `test/stubs.bats` | Self-tests for the stubs and the fixtures. |
+| `test/p2_cli.bats`, `test/p2_ops.bats`, `test/p2_hygiene.bats` | Phase 2: exit codes and argument validation, dependency check, locking and index caching, global initialisation, ZIM listing and `-S`. |
+| `test/p3_*.bats` | Phase 3: structure (`main()` and the source guard), the legacy-name removal and the opt-in self-update. |
+| `test/unit.bats` | Unit tests. They `source` the script and call its functions directly. |
 | `test/helpers/common.bash` | Shared setup. It creates a sandbox, copies the script there and prepends the stub `PATH`. |
 | `test/helpers/bin/` | Stubs for `wget`, `clear` and `git`, so tests never touch the network or the real repository. |
-| `test/fixtures/` | A fake catalog, `.meta4` files and payloads served by the `wget` stub. |
+| `test/fixtures/` | A fake catalog, `.meta4` files and payloads served by the `wget` stub. `build.sh` regenerates them. |
 | `test/libs/` | Pinned git submodules for bats-core, bats-support and bats-assert. |
 | `Makefile` | `make test`, `make lint`. |
 | `.github/workflows/ci.yml` | CI runs lint and tests on every push and pull request. |
@@ -30,7 +36,7 @@ make lint test
 
 ## Hard rules
 
-1. **Never run the script outside the test sandbox.** That rules out real ZIM directories, `-d`/`--disable-dry-run` and the repository working tree as the current directory. The script writes `download.log` and `kiwix-index` into the current directory. Its self-update can run `git stash` and `git pull` on the clone it lives in.
+1. **Never run the script outside the test sandbox.** That rules out real ZIM directories, `-d`/`--disable-dry-run` and the repository working tree as the current directory. The script writes `download.log` and `kiwix-index` into the current directory. Self-update now only runs with `-U`/`--self-update`, but with `-U` it runs `git fetch` and `git pull` on the clone it lives in, so never pass `-U` outside the sandbox either. Tests that exercise `-U` must use throwaway repositories inside the sandbox and must never read or change the user's global or system git config: set `HOME` and `GIT_CONFIG_GLOBAL` to paths inside the sandbox and `GIT_CONFIG_NOSYSTEM=1`, and never run `git config --global`.
 2. **Never contact kiwix.org from tests.** All network access goes through the `wget` stub in `test/helpers/bin/`. The one exception is a manual, read-only, dry-run check that a human explicitly asks for.
 3. **Dry-run is sacred.** While `DEBUG=1` (the default, i.e. no `-d`), nothing inside the ZIM directory may be created, modified or deleted. That includes `.sha256` files, lock files and torrents. Writing `download.log` and `kiwix-index` in the current directory is allowed.
 4. **No unverified deletes.** Every code path that runs `rm` on a ZIM must be preceded by either:
@@ -52,12 +58,19 @@ make lint test
   - Each commit message names its finding ID, e.g. `fix(F1): ...`.
   - End commit messages with the attribution line the harness provides.
 - **Keep fixes cherry-pickable.** Upstream may want individual fixes, so a fix must not depend on an unrelated refactor.
-- **Keep docs in sync.** Run `./kiwix-zim-updater.sh -h`. Its output and the usage block in `README.md` must match.
+- **Keep docs in sync.** The output of `kiwix-zim-updater.sh -h` and the usage block in `README.md` must match byte for byte. From the repository root, this runs `-h` from a scratch directory and compares the two:
+
+  ```sh
+  diff <(cd "$(mktemp -d)" && bash "$OLDPWD/kiwix-zim-updater.sh" -h) <(awk '/^## Usage$/{u=1;next} u && /^```text$/{p=1;next} p && /^```$/{exit} p' README.md)
+  ```
+
+  The exit-code table below and the one in `README.md` must also agree.
 
 ## Bash style
 
 - Target Bash 4 or later with GNU userland. The script relies on `grep -P`, GNU `date -d`, `numfmt` and `flock`.
 - Quote every expansion. Initialise every global near the top of the script, so that no value leaks in from the environment.
+- **Sourcing must stay side-effect free.** `test/unit.bats` sources the script, which is safe only because all work happens in `main()`, behind the `[[ "${BASH_SOURCE[0]}" == "$0" ]]` source guard at the bottom. Keep it that way: at top level, put nothing but function definitions and default assignments. No output, no commands with side effects, no `cd`, no `shopt`/`set` changes and no file or network access outside a function.
 - **Do not add a blanket `set -e`.** The script relies on `[[ ... ]] && ...` chains, which would abort it. Check exit statuses explicitly instead.
 - For pipelines like `wget ... | tee`, check `${PIPESTATUS[0]}`. The status of the pipeline itself is `tee`'s.
 - Write files that other runs read, such as the index or checksums, to a temporary file first and `mv` it into place.
@@ -68,8 +81,8 @@ make lint test
 | Code | Meaning |
 |---|---|
 | 0 | Success, including "nothing to update". |
-| 1 | Runtime error, such as a network or parse failure, a missing dependency or a failed download. |
-| 2 | Usage error: a bad option or value, or a missing or invalid ZIM directory. |
+| 1 | Runtime error, such as a network or parse failure, a missing dependency, no ZIMs found in the ZIM directory or any failed download (including a size or checksum mismatch). With `-f`, also any ZIM that could not be verified, or that was found corrupt and kept. |
+| 2 | Usage error: a bad option or value, more than one ZIM directory, a missing or invalid ZIM directory, or `-c`/`-f` together with `-t`. |
 | 75 | Another instance is already running on this ZIM directory. |
 
 Any change to this contract must update this table, the README and the tests together.
