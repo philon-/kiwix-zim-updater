@@ -21,7 +21,7 @@ The script runs as a **dry-run unless you pass `-d`**: it then changes nothing i
 - **Failures leave everything as it was.** A failed or interrupted download stays a `.part` file and is resumed by the next run. During an internet outage a run exits 1 without touching the ZIM directory.
 - **The disk does not fill up.** A download is skipped when it would leave less than `--min-free` (default 1 GiB) free. Requests time out instead of hanging.
 - **One run per ZIM directory** at a time (`flock`); a second one exits 75.
-- **`-f` checks the whole library** against the published checksums and replaces a corrupt current ZIM only once its replacement is verified. It never deletes a ZIM it cannot replace.
+- **`-f` checks the library** against the published checksums and replaces a corrupt current ZIM only once its replacement is verified. It never deletes a ZIM it cannot replace. A ZIM it cannot verify makes the run exit 1; one that is not in the catalog and has no cached `.sha256` is reported as not checked.
 - **Leftovers are reported, not deleted.** `.part` files that can no longer be used are listed at the end of a run; `--clean-partials` removes them.
 
 ## Running from cron

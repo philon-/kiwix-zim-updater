@@ -947,6 +947,13 @@ main() {
         echo -e "${GREEN_REGULAR}    Cached Checksum Found${CLEAR}"
       else
         LocalRequiresDownloadArray+=(0)
+        # Not a ZIM from the catalog (e.g. self-made or renamed) and nothing cached to check it against: outside what
+        # -f covers, so say so instead of skipping it silently. This does not change the exit code.
+        if [[ $VERIFY_LIBRARY -eq 1 ]]; then
+          echo -e "${BLUE_BOLD}  - $FileName:${CLEAR}"
+          echo -e "${YELLOW_REGULAR}    Not in the catalog and no cached .sha256: not checked by -f${CLEAR}"
+          echo "Not checked by -f: $FileName (not in the catalog, no cached .sha256)" >>"$LOG_FILE"
+        fi
       fi
       continue
     fi

@@ -77,3 +77,14 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_success
   assert_output --partial 'Verification skipped due to file size (minimum'
 }
+
+@test "verify: -f reports a ZIM outside the catalog without a cached checksum as not checked" {
+  make_local_zim my_own_notes_2025-01.zim 'self-made'
+  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  run_updater -f "$ZIMS"
+  assert_success
+  assert_output --partial '- my_own_notes_2025-01.zim:'
+  assert_output --partial 'Not in the catalog and no cached .sha256: not checked by -f'
+  run download_log
+  assert_line 'Not checked by -f: my_own_notes_2025-01.zim (not in the catalog, no cached .sha256)'
+}
