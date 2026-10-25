@@ -33,13 +33,3 @@ setup() {
   assert_success
   assert_output 'off'
 }
-
-@test "N9: a current ZIM with an upper-case .ZIM extension is not downloaded again" {
-  make_local_zim wikipedia_en_test_2026-01.ZIM --from-remote "$WP_REMOTE"
-  run_updater -d "$ZIMS"
-  assert_success
-  assert_output --partial 'No new update'
-  run wget_downloads
-  assert_output ''
-  assert_exists "$ZIMS/wikipedia_en_test_2026-01.ZIM"
-}

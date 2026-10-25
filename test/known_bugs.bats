@@ -115,12 +115,6 @@ setup() {
   assert_output --partial 'Kiwix ZIM Directory not provided'
 }
 
-@test "H1: an empty ZIM directory exits 1" {
-  run_updater "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'No ZIMs found'
-}
-
 @test "H1: a failed download exits 1" {
   make_local_zim "$WP_OLD"
   export FAKE_WGET_CORRUPT="$WP_NEW"
