@@ -58,6 +58,16 @@ setup() {
   run cmp -s "$SANDBOX/c" "$src"
   assert_failure
 
+  # NETFAIL: fails without creating or touching the -O file
+  printf 'keep' >"$SANDBOX/n"
+  FAKE_WGET_NETFAIL=big_test run wget -q -c -O "$SANDBOX/n" 'https://mirror.kiwix.test/zim/other/big_test_2026-03.zim'
+  assert_failure 4
+  run cat "$SANDBOX/n"
+  assert_output 'keep'
+  FAKE_WGET_NETFAIL=big_test run wget -q -O "$SANDBOX/n2" 'https://mirror.kiwix.test/zim/other/big_test_2026-03.zim'
+  assert_failure 4
+  refute_exists "$SANDBOX/n2"
+
   FAKE_WGET_META_FAIL=1 run wget -q -O - 'https://download.kiwix.test/zim/other/big_test_2026-03.zim.meta4?country='
   assert_failure 8
   assert_output ''
@@ -124,15 +134,4 @@ setup() {
   "$SANDBOX/rebuilt/build.sh"
   run diff -r "$FIXTURES_SRC" "$SANDBOX/rebuilt"
   assert_success
-}
-
-@test "stubs: FAKE_WGET_NETFAIL fails a download without touching the -O file" {
-  printf 'keep' >"$SANDBOX/out.zim"
-  FAKE_WGET_NETFAIL=small_test run wget -q -c -O "$SANDBOX/out.zim" https://mirror.kiwix.test/zim/other/small_test_2025-12.zim
-  assert_failure 4
-  run cat "$SANDBOX/out.zim"
-  assert_output 'keep'
-  FAKE_WGET_NETFAIL=small_test run wget -q -O "$SANDBOX/new.zim" https://mirror.kiwix.test/zim/other/small_test_2025-12.zim
-  assert_failure 4
-  refute_exists "$SANDBOX/new.zim"
 }
