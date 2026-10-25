@@ -574,8 +574,9 @@ AnyDownloads=0
 
 for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
   RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
+  FileName=${LocalZIMNameArray[$i]}
   if [[ $RemoteIndex -eq -1 ]]; then
-    if [[ $VERIFY_LIBRARY -eq 1 ]] && [[ -f "$FileName.sha256" ]]; then
+    if [[ $VERIFY_LIBRARY -eq 1 ]] && [[ -f "$ZIMPath$FileName.sha256" ]]; then
       LocalRequiresDownloadArray+=(3)
       AnyDownloads=1
       echo -e "${BLUE_BOLD}  - $FileName:${CLEAR}"
@@ -586,7 +587,6 @@ for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
     continue
   fi
 
-  FileName=${LocalZIMNameArray[$i]}
   echo -e "${BLUE_BOLD}  - $FileName:${CLEAR}"
   [[ -f "$ZIMPath.~lock.$FileName" ]] && echo -e "${YELLOW_REGULAR}    Incomplete download detected\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalRequiresDownloadArray+=(1) && AnyDownloads=1 && continue
 
@@ -766,9 +766,9 @@ if [ $AnyDownloads -eq 1 ]; then
         # actually verify the file
         echo -e "${BLUE_REGULAR}    Calculating checksum for : $OldZIM${CLEAR}"
         echo "Calculating checksum for : $OldZIM" >>download.log
-        [[ ${LocalRequiresDownloadArray[$z]} -ne 2 ]] && write_checksum_file "$OldZIM" "$ExpectedHash"
+        [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] && write_checksum_file "$OldZIM" "$ExpectedHash"
         # An unknown expected size (failed meta4 fetch) is "cannot verify", never "corrupt"
-        if [[ ${LocalRequiresDownloadArray[$z]} -ne 2 ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
+        if [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
           RequiresDownload=1
           if [[ $DEBUG -eq 0 ]]; then
             if [[ $SKIP_PURGE -eq 0 ]]; then
@@ -789,7 +789,7 @@ if [ $AnyDownloads -eq 1 ]; then
           echo -e "${YELLOW_BOLD}    No valid checksum available (metadata unavailable?), cannot verify $OldZIM. Skipping, file kept.${CLEAR}" && echo "Cannot verify $OldZIM: no valid checksum available, file kept" >>download.log
         elif ! hash_matches "$OldZIM" "$ExpectedHash"; then
           # we checked a very old file, but we will choose to not replace it because we cannot, so we will leave it. A regular update will purge it naturally
-          [[ ${LocalRequiresDownloadArray[$z]} -eq 2 ]] && echo -e "${RED_BOLD}    Checksum failed, online file not found, continuing${CLEAR}" && echo && continue
+          [[ ${LocalRequiresDownloadArray[$z]} -ne 1 ]] && echo -e "${RED_BOLD}    ✗ Checksum failed, but no online version to replace it with. File kept.${CLEAR}" && echo "✗ Checksum failed for $OldZIM, no online version to replace it with. File kept." >>download.log && echo && continue
           if [[ $DEBUG -eq 0 ]]; then
             if [[ $SKIP_PURGE -eq 0 ]]; then
               echo -e "${RED_BOLD}    ✗ Status : Checksum failed, removing corrupt file${CLEAR}"
@@ -820,7 +820,8 @@ if [ $AnyDownloads -eq 1 ]; then
           echo
           continue
         fi
-        [[ ${LocalRequiresDownloadArray[$z]} -eq 2 ]] && continue
+        # Verified against a cached checksum only (states 2 and 3): there is nothing to download
+        [[ ${LocalRequiresDownloadArray[$z]} -ne 1 ]] && continue
         #                rm "$OldZIMPath.sha256"
       fi
     fi

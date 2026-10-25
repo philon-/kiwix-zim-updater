@@ -118,7 +118,6 @@ keep_copy() {
 }
 
 @test "F6: -f verifies an unmatched local ZIM against its own .sha256 in the ZIM dir" {
-  skip "F6: \$FileName is used before assignment and resolved against the CWD"
   make_local_zim orphan_test_2025-01.zim
   make_local_sha256 orphan_test_2025-01.zim
   run_updater -f "$ZIMS"
@@ -333,17 +332,29 @@ EOF
 }
 
 @test "N2: -f -d never deletes an unmatched ZIM that has a valid own checksum" {
-  skip "N2: the unmatched-ZIM verify path compares against a stale/empty ExpectedSize and rm's the ZIM"
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   make_local_zim zzz_orphan_test_2025-01.zim "$(head -c 2048 < <(yes 'orphan payload'))"
   make_local_sha256 zzz_orphan_test_2025-01.zim
   keep_copy zzz_orphan_test_2025-01.zim
-  # Today the unmatched-ZIM path is only reached when "$FileName.sha256"
-  # (the previous ZIM's name, see F6) exists in the CWD; provide it so this
-  # test exercises the deletion with or without the F6 fix.
-  cp "$(remote_file "$WP_REMOTE.sha256")" "$RUN_DIR/$NEW_WP.sha256"
   run_updater -f -d "$ZIMS"
   cmp "$ZIMS/zzz_orphan_test_2025-01.zim" "$SANDBOX/zzz_orphan_test_2025-01.zim.orig"
+  assert_output --partial 'Checksum passed'
+  run wget_downloads
+  assert_output ''
+}
+
+@test "N2: -f -d reports a corrupt unmatched ZIM but keeps it (nothing to replace it with)" {
+  make_local_zim orphan_test_2025-01.zim 'orphan payload'
+  make_local_sha256 orphan_test_2025-01.zim
+  printf 'tampered' >"$ZIMS/orphan_test_2025-01.zim"
+  keep_copy orphan_test_2025-01.zim
+  cp "$ZIMS/orphan_test_2025-01.zim.sha256" "$SANDBOX/sha256.orig"
+  run_updater -f -d "$ZIMS"
+  assert_output --partial 'no online version to replace it with'
+  cmp "$ZIMS/orphan_test_2025-01.zim" "$SANDBOX/orphan_test_2025-01.zim.orig"
+  cmp "$ZIMS/orphan_test_2025-01.zim.sha256" "$SANDBOX/sha256.orig"
+  run wget_downloads
+  assert_output ''
 }
 
 @test "N3: -f -d with a failed meta4 fetch never deletes a good ZIM" {
