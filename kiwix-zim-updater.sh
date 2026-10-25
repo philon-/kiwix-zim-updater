@@ -328,7 +328,7 @@ usage_example() {
   echo '    '
   echo '    -f, --verify-library       Verifies that the entire library has the correct checksums as found online.'
   echo '                               Expected behavior is to create sha256 files during a normal run so this option can be used at a later date without internet.'
-  echo '                               Disable this using -S'
+  echo '                               Use -S to stop new .sha256 files from being written.'
   echo ''
   echo 'Web Download Options:'
   echo '    -c, --calculate-checksum   Verifies that the downloaded files were not corrupted, but can take a while for large downloads.'

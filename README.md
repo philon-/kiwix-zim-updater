@@ -169,7 +169,7 @@ Action Method Options:
     
     -f, --verify-library       Verifies that the entire library has the correct checksums as found online.
                                Expected behavior is to create sha256 files during a normal run so this option can be used at a later date without internet.
-                               Disable this using -S
+                               Use -S to stop new .sha256 files from being written.
 
 Web Download Options:
     -c, --calculate-checksum   Verifies that the downloaded files were not corrupted, but can take a while for large downloads.
