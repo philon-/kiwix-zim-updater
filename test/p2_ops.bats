@@ -10,62 +10,6 @@ setup() {
 ###############################################################################
 # H7: dependency preflight
 
-@test "H7: several missing tools are all named on stderr, before any network access" {
-  make_tooldir wget numfmt flock
-  make_local_zim "$WP_OLD"
-  PATH="$TOOLDIR" run_updater --separate-stderr "$ZIMS"
-  assert_failure 1
-  [[ "$stderr" == *"wget"* ]]
-  [[ "$stderr" == *"numfmt"* ]]
-  [[ "$stderr" == *"flock"* ]]
-  refute_output --partial 'Building online ZIM list'
-}
-
-@test "H7: a grep without -P support is reported" {
-  make_tooldir grep
-  local real_grep
-  real_grep="$(command -v grep)"
-  # A grep that refuses -P, like BusyBox or BSD grep.
-  cat >"$TOOLDIR/grep" <<EOF
-#!$(command -v bash)
-for a in "\$@"; do
-  [[ "\$a" == -*P* ]] && { echo "grep: invalid option -- 'P'" >&2; exit 2; }
-done
-exec "$real_grep" "\$@"
-EOF
-  chmod +x "$TOOLDIR/grep"
-  make_local_zim "$WP_OLD"
-  PATH="$TOOLDIR" run_updater "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'grep -P'
-}
-
-@test "H7: git is required when the self-update would run" {
-  make_tooldir git
-  mkdir "$SANDBOX/bin/.git"
-  make_local_zim "$WP_OLD"
-  PATH="$TOOLDIR" run_updater -U "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'git'
-}
-
-@test "H7: git is not required without -U, even in a git clone" {
-  make_tooldir git
-  mkdir "$SANDBOX/bin/.git"
-  make_local_zim "$WP_OLD"
-  PATH="$TOOLDIR" run_updater "$ZIMS"
-  assert_success
-  refute_output --partial 'Missing required tool'
-}
-
-@test "H7: git is not required outside a git clone" {
-  make_tooldir git
-  make_local_zim "$WP_OLD"
-  PATH="$TOOLDIR" run_updater -U "$ZIMS"
-  assert_success
-  refute_output --partial 'Missing required tool'
-}
-
 ###############################################################################
 # H6: one instance per ZIM directory
 

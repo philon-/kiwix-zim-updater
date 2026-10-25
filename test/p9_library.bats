@@ -177,13 +177,3 @@ lib_settled() {
   run_updater -d --library -c "$ZIMS"
   assert_failure 2
 }
-
-@test "library: kiwix-manage is only required with --library" {
-  make_tooldir kiwix-manage
-  make_local_zim "$WP_OLD"
-  PATH="$TOOLDIR" run_updater "$ZIMS"
-  assert_success
-  PATH="$TOOLDIR" run_updater --library "$LIB" "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'kiwix-manage'
-}

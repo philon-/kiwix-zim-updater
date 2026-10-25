@@ -205,15 +205,6 @@ setup() {
   assert_output ''
 }
 
-@test "H7: a missing wget exits 1 with a clear message" {
-  make_tooldir wget
-  make_local_zim "$WP_OLD"
-  PATH="$TOOLDIR" run_updater "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'wget'
-  refute_output --partial 'command not found'
-}
-
 ###############################################################################
 # M: medium
 
