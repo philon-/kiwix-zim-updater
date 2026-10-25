@@ -300,7 +300,6 @@ EOF
 # M: medium
 
 @test "M2: clear is not called when stdout is not a terminal" {
-  skip "M2: clear runs unconditionally (TERM noise under cron)"
   make_local_zim "$OLD_WP"
   run_updater "$ZIMS"
   assert_success

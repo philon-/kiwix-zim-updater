@@ -567,7 +567,7 @@ done
 [[ ${#POSITIONAL_ARGS[@]} -gt 1 ]] && usage_error "Only one ZIM directory can be given, got ${#POSITIONAL_ARGS[@]}: ${POSITIONAL_ARGS[*]}"
 set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters that we skipped earlier
 
-clear # Clear screen
+[[ -t 1 ]] && clear # Clear screen, but only on a terminal (under cron there is no TERM to clear)
 
 if [[ $CALCULATE_CHECKSUM -ne 0 ]] && [[ $DOWNLOAD_METHOD -ne 1 ]]; then
   echo -e "${RED_BOLD}Calculating Checksum not available with torrenting. Aborting.${CLEAR}" >&2
