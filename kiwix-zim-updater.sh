@@ -94,6 +94,12 @@ END_ANCHOR_REGEX="\.zim"
 
 COMPLETE_ENDING_REGEX="$YEAR_REGEX-$MONTH_REGEX$END_ANCHOR_REGEX"
 
+# say <colour> <message> - Print the message in colour, and log it without the colour and the leading indent
+say() {
+  echo -e "$1$2${CLEAR}"
+  echo "${2#"${2%%[! ]*}"}" >>"$LOG_FILE"
+}
+
 # This will ask the api what files it has to offer and store them in arrays
 master_scrape() {
   unset RemoteFiles
@@ -120,16 +126,14 @@ master_scrape() {
     rawCatalog="$(wget "${WGET_NET_OPTS[@]}" --show-progress -q -O - "$CatalogURL")"
     fetchStatus=$?
     if [[ $fetchStatus -ne 0 ]]; then
-      echo -e "${RED_REGULAR}    ✗ Could not fetch the online catalog (wget exit $fetchStatus). Exiting...${CLEAR}"
-      echo "✗ Could not fetch the online catalog (wget exit $fetchStatus). Exiting..." >> "$LOG_FILE"
+      say "${RED_REGULAR}" "    ✗ Could not fetch the online catalog (wget exit $fetchStatus). Exiting..."
       exit 1
     fi
     catalogDate="$(echo "$rawCatalog" | grep -ioP "(?<=<updated>)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?=Z</updated>)" | head -1)"
     RawLibrary="$(echo "$rawCatalog" | grep -i 'application/x-zim' | grep -ioP "^\s+\K.*$")"
     unset rawCatalog
     if [[ -z "$catalogDate" ]]; then
-      echo -e "${RED_REGULAR}    ✗ The online catalog has no <updated> date. Exiting...${CLEAR}"
-      echo "✗ The online catalog has no <updated> date. Exiting..." >> "$LOG_FILE"
+      say "${RED_REGULAR}" "    ✗ The online catalog has no <updated> date. Exiting..."
       exit 1
     fi
     if [[ -z "$RawLibrary" ]]; then
@@ -192,12 +196,10 @@ master_scrape() {
   unset IFS
 
   if [[ ${#RemoteFiles[@]} -eq 0 ]]; then
-    echo -e "${RED_REGULAR}    ✗  Could not find any remote files, exiting${CLEAR}"
-    echo "✗  Could not find any remote files, exiting" >> "$LOG_FILE"
+    say "${RED_REGULAR}" "    ✗  Could not find any remote files, exiting"
     exit 1
   else
-    echo -e "${GREEN_BOLD}    ✓ Found ${#RemoteFiles[@]} files online"
-    echo "✓ Found ${#RemoteFiles[@]} files online" >> "$LOG_FILE"
+    say "${GREEN_BOLD}" "    ✓ Found ${#RemoteFiles[@]} files online"
   fi
 
   if [[ ${#RemoteFiles[@]} -ne ${#Basenames[@]} ]] || \
@@ -220,30 +222,25 @@ master_scrape() {
 # the same arguments; KIWIX_ZIM_UPDATER_UPDATED (deliberately read from the environment) stops it from updating again.
 self_update() {
   local fetchStatus diffStatus oldHead newHead
-  echo -e "${YELLOW_BOLD}1. Checking for Script Updates...${CLEAR}"
-  echo  "1. Checking for Script Updates..." >> "$LOG_FILE"
+  say "${YELLOW_BOLD}" "1. Checking for Script Updates..."
   echo
   if [[ $SELF_UPDATE -ne 1 ]]; then
-    echo -e "${YELLOW_REGULAR}   Check Skipped (use -U to enable)${CLEAR}"
-    echo "Check Skipped (use -U to enable)" >> "$LOG_FILE"
+    say "${YELLOW_REGULAR}" "   Check Skipped (use -U to enable)"
     echo
     return
   fi
   if [[ -n "${KIWIX_ZIM_UPDATER_UPDATED:-}" ]]; then
     unset KIWIX_ZIM_UPDATER_UPDATED
-    echo -e "${GREEN_BOLD}   ✓ Running the updated version${CLEAR}"
-    echo "✓ Running the updated version" >> "$LOG_FILE"
+    say "${GREEN_BOLD}" "   ✓ Running the updated version"
     echo
     return
   fi
   if [[ ! -e "$SCRIPTPATH/.git" ]]; then
-    echo -e "${RED_REGULAR}   ✗ Git Clone Not Detected: Skipping Update Check${CLEAR}"
-    echo "✗ Git Clone Not Detected: Skipping Update Check" >> "$LOG_FILE"
+    say "${RED_REGULAR}" "   ✗ Git Clone Not Detected: Skipping Update Check"
     echo
     return
   fi
-  echo -e "${GREEN_BOLD}   ✓ Git Clone Detected: Checking Script Version...${CLEAR}"
-  echo "✓ Git Clone Detected: Checking Script Version..." >> "$LOG_FILE"
+  say "${GREEN_BOLD}" "   ✓ Git Clone Detected: Checking Script Version..."
   if [[ $(timeout 10s git -C "$SCRIPTPATH" rev-parse --abbrev-ref HEAD) != "$BRANCH" ]]; then
     echo -e "${YELLOW_BOLD}     You appear to be on a different branch so I will assume you are developing and do not want an update${CLEAR}"
     echo "Not on branch $BRANCH: Skipping Update" >> "$LOG_FILE"
@@ -254,41 +251,34 @@ self_update() {
   GIT_TERMINAL_PROMPT=0 timeout 30s git -C "$SCRIPTPATH" fetch --quiet origin
   fetchStatus=$?
   if [[ $fetchStatus -ne 0 ]]; then
-    echo -e "${RED_REGULAR}   ✗ Could not fetch updates (git exit $fetchStatus): Continuing with the current version${CLEAR}"
-    echo "✗ Could not fetch updates (git exit $fetchStatus): Continuing with the current version" >> "$LOG_FILE"
+    say "${RED_REGULAR}" "   ✗ Could not fetch updates (git exit $fetchStatus): Continuing with the current version"
     echo
     return
   fi
   timeout 10s git -C "$SCRIPTPATH" diff --quiet --exit-code "origin/$BRANCH" -- "$SCRIPTFILE"
   diffStatus=$?
   if [[ $diffStatus -eq 0 ]]; then
-    echo -e "${GREEN_BOLD}   ✓ Version: Current${CLEAR}"
-    echo "✓ Version: Current" >> "$LOG_FILE"
+    say "${GREEN_BOLD}" "   ✓ Version: Current"
     echo
     return
   elif [[ $diffStatus -ne 1 ]]; then
-    echo -e "${RED_REGULAR}   ✗ Could not compare with origin/$BRANCH (git exit $diffStatus): Continuing with the current version${CLEAR}"
-    echo "✗ Could not compare with origin/$BRANCH (git exit $diffStatus): Continuing with the current version" >> "$LOG_FILE"
+    say "${RED_REGULAR}" "   ✗ Could not compare with origin/$BRANCH (git exit $diffStatus): Continuing with the current version"
     echo
     return
   fi
-  echo -e "${RED_REGULAR}   ✗ Version: Mismatched${CLEAR}"
-  echo "✗ Version: Mismatched" >> "$LOG_FILE"
+  say "${RED_REGULAR}" "   ✗ Version: Mismatched"
   echo
-  echo -e "${YELLOW_BOLD}1a. Fetching Update...${CLEAR}"
-  echo "1a. Fetching Update..." >> "$LOG_FILE"
+  say "${YELLOW_BOLD}" "1a. Fetching Update..."
   echo
   # Local work is never stashed, reset or overwritten: a modified clone is left alone
   if [[ -n "$(git -C "$SCRIPTPATH" status --porcelain)" ]]; then
-    echo -e "${RED_REGULAR}   ✗ $SCRIPTPATH has local changes: Not updating, continuing with the current version${CLEAR}"
-    echo "✗ $SCRIPTPATH has local changes: Not updating, continuing with the current version" >> "$LOG_FILE"
+    say "${RED_REGULAR}" "   ✗ $SCRIPTPATH has local changes: Not updating, continuing with the current version"
     echo
     return
   fi
   oldHead="$(git -C "$SCRIPTPATH" rev-parse HEAD)"
   if ! GIT_TERMINAL_PROMPT=0 timeout 30s git -C "$SCRIPTPATH" pull --ff-only --no-rebase --quiet origin "$BRANCH"; then
-    echo -e "${RED_REGULAR}   ✗ Update failed (no fast-forward possible?): Continuing with the current version${CLEAR}"
-    echo "✗ Update failed (no fast-forward possible?): Continuing with the current version" >> "$LOG_FILE"
+    say "${RED_REGULAR}" "   ✗ Update failed (no fast-forward possible?): Continuing with the current version"
     echo
     return
   fi
@@ -299,8 +289,7 @@ self_update() {
     echo
     return
   fi
-  echo -e "${GREEN_BOLD}   ✓ Update Complete. Running New Version. Standby...${CLEAR}"
-  echo "✓ Update Complete. Running New Version. Standby..." >> "$LOG_FILE"
+  say "${GREEN_BOLD}" "   ✓ Update Complete. Running New Version. Standby..."
   sleep 3
 
   export KIWIX_ZIM_UPDATER_UPDATED=1
@@ -366,8 +355,7 @@ usage_error() {
 
 # flags - Flag and ZIM Processing Functions
 flags() {
-  echo -e "${YELLOW_BOLD}2. Preprocessing...${CLEAR}"
-  echo "2. Preprocessing..." >> "$LOG_FILE"
+  say "${YELLOW_BOLD}" "2. Preprocessing..."
   echo
   echo -e "${BLUE_BOLD}  -Validating ZIM directory...${CLEAR}"
   echo "Validating ZIM directory..." >> "$LOG_FILE"
@@ -378,8 +366,7 @@ flags() {
       ZIMPath=$1
     else
       ZIMPath=$1
-      echo -e "${RED_REGULAR}  ✗ Cannot write to '${1}', continuing in dry-run${CLEAR}"
-      echo "✗ Cannot write to '${1}', continuing in dry-run" >> "$LOG_FILE"
+      say "${RED_REGULAR}" "  ✗ Cannot write to '${1}', continuing in dry-run"
       echo
       # -d was asked for but cannot be honoured: finish the run as a simulation, then report it as a failure
       [[ $DEBUG -eq 0 ]] && ForcedDryRun=1
@@ -387,11 +374,9 @@ flags() {
     fi
   else # Um... no ZIM directory path provided? Okay, let's show the usage and exit.
     if [[ -z ${1} ]]; then
-      echo -e "${RED_REGULAR}  ✗ Kiwix ZIM Directory not provided${CLEAR}"
-      echo "✗ Kiwix ZIM Directory not provided" >> "$LOG_FILE"
+      say "${RED_REGULAR}" "  ✗ Kiwix ZIM Directory not provided"
     else
-      echo -e "${RED_REGULAR}  ✗ '$1' is not a directory${CLEAR}"
-      echo "✗ '$1' is not a directory" >> "$LOG_FILE"
+      say "${RED_REGULAR}" "  ✗ '$1' is not a directory"
     fi
     echo
     usage_example 2
@@ -538,13 +523,11 @@ check_dependencies() {
 # It is held until the script exits.
 acquire_zim_dir_lock() {
   if ! exec 9<"$ZIMPath"; then
-    echo -e "${RED_BOLD}  ✗ Cannot open '$ZIMPath' to lock it. Exiting...${CLEAR}" >&2
-    echo "✗ Cannot open '$ZIMPath' to lock it. Exiting..." >> "$LOG_FILE"
+    say "${RED_BOLD}" "  ✗ Cannot open '$ZIMPath' to lock it. Exiting..." >&2
     exit 1
   fi
   if ! flock -n 9; then
-    echo -e "${RED_BOLD}  ✗ Another instance is already running on '$ZIMPath'. Exiting...${CLEAR}" >&2
-    echo "✗ Another instance is already running on '$ZIMPath'. Exiting..." >> "$LOG_FILE"
+    say "${RED_BOLD}" "  ✗ Another instance is already running on '$ZIMPath'. Exiting..." >&2
     exit 75
   fi
 }
@@ -581,8 +564,7 @@ cleanup_partials() {
   lockFiles=("$ZIMPath".~lock.*.zim)
   [[ ${#partFiles[@]} -eq 0 ]] && [[ ${#lockFiles[@]} -eq 0 ]] && return 0
 
-  echo -e "${YELLOW_BOLD}5. Cleaning up...${CLEAR}"
-  echo "5. Cleaning up..." >> "$LOG_FILE"
+  say "${YELLOW_BOLD}" "5. Cleaning up..."
   echo
 
   for part in "${partFiles[@]}"; do
@@ -590,21 +572,18 @@ cleanup_partials() {
     partName="${part##*/}"
     partName="${partName%.part}"
     if [[ " ${ResumableParts[*]} " == *" $part "* ]]; then
-      echo -e "  ${YELLOW_BOLD}Keeping interrupted download for the next run to resume: $part${CLEAR}"
-      echo "Keeping interrupted download for the next run to resume: $part" >> "$LOG_FILE"
+      say "${YELLOW_BOLD}" "  Keeping interrupted download for the next run to resume: $part"
     elif [[ " ${RemoteFiles[*]} " != *" $partName "* ]] || [[ " ${VerifiedZIMs[*]} " == *" $partName "* ]]; then
       # Useless: the release left the catalog so it can never be resumed, or its finished ZIM was just verified good
       if [[ $CLEAN_PARTIALS -eq 1 ]]; then
-        echo -e "  ${BLUE_BOLD}${simulated}Removing unfinished download that can no longer be used: $part${CLEAR}"
-        echo "${simulated}Removing unfinished download that can no longer be used: $part" >> "$LOG_FILE"
+        say "${BLUE_BOLD}" "  ${simulated}Removing unfinished download that can no longer be used: $part"
         [[ $DEBUG -eq 0 ]] && rm -f "$part"
       else
         echo -e "  ${YELLOW_BOLD}Unfinished download that can no longer be used: $part (--clean-partials removes it)${CLEAR}"
         echo "Unfinished download that can no longer be used: $part" >> "$LOG_FILE"
       fi
     else
-      echo -e "  ${YELLOW_BOLD}Keeping unfinished download for a later run to resume: $part${CLEAR}"
-      echo "Keeping unfinished download for a later run to resume: $part" >> "$LOG_FILE"
+      say "${YELLOW_BOLD}" "  Keeping unfinished download for a later run to resume: $part"
     fi
     header=1
   done
@@ -614,11 +593,9 @@ cleanup_partials() {
     lockName="${lock##*/}"
     lockName="${lockName#.~lock.}"
     if [[ ! -f "$ZIMPath$lockName" ]]; then
-      echo -e "  ${BLUE_BOLD}${simulated}Removing stale lock without a download: $lock${CLEAR}"
-      echo "${simulated}Removing stale lock without a download: $lock" >> "$LOG_FILE"
+      say "${BLUE_BOLD}" "  ${simulated}Removing stale lock without a download: $lock"
       if [[ -f "$ZIMPath$lockName.sha256" ]]; then
-        echo -e "  ${BLUE_BOLD}${simulated}Removing its abandoned checksum: $ZIMPath$lockName.sha256${CLEAR}"
-        echo "${simulated}Removing its abandoned checksum: $ZIMPath$lockName.sha256" >> "$LOG_FILE"
+        say "${BLUE_BOLD}" "  ${simulated}Removing its abandoned checksum: $ZIMPath$lockName.sha256"
         [[ $DEBUG -eq 0 ]] && rm -f "$ZIMPath$lockName.sha256"
       fi
       [[ $DEBUG -eq 0 ]] && rm -f "$lock"
@@ -671,14 +648,12 @@ rebuild_library() {
       added=$((added + 1))
     else
       failed=$((failed + 1))
-      echo -e "${YELLOW_BOLD}    Library: $name could not be read by kiwix-manage and is left out of $LIBRARY_XML${CLEAR}"
-      echo "Library: $name could not be read by kiwix-manage and is left out of $LIBRARY_XML" >>"$LOG_FILE"
+      say "${YELLOW_BOLD}" "    Library: $name could not be read by kiwix-manage and is left out of $LIBRARY_XML"
     fi
   done
   if [[ $added -eq 0 ]]; then
     if [[ $failed -gt 0 ]]; then
-      echo -e "${RED_BOLD}    ✗ Library: no ZIM could be added, $LIBRARY_XML is left as it is${CLEAR}"
-      echo "✗ Library: no ZIM could be added, $LIBRARY_XML is left as it is" >>"$LOG_FILE"
+      say "${RED_BOLD}" "    ✗ Library: no ZIM could be added, $LIBRARY_XML is left as it is"
       rm -f "$tmp"
       LibraryFailed=1
       return 1
@@ -686,8 +661,7 @@ rebuild_library() {
     printf '<library version="20110515">\n</library>\n' >"$tmp" 2>/dev/null
   fi
   if [[ ! -f "$tmp" ]]; then
-    echo -e "${RED_BOLD}    ✗ Library: could not write $tmp${CLEAR}"
-    echo "✗ Library: could not write $tmp" >>"$LOG_FILE"
+    say "${RED_BOLD}" "    ✗ Library: could not write $tmp"
     LibraryFailed=1
     return 1
   fi
@@ -697,15 +671,13 @@ rebuild_library() {
   fi
   if cat "$tmp" >"$LIBRARY_XML"; then
     rm -f "$tmp"
-    echo -e "${GREEN_REGULAR}    ✓ Library: $LIBRARY_XML now lists $added ZIM(s)${CLEAR}"
-    echo "✓ Library: $LIBRARY_XML now lists $added ZIM(s)" >>"$LOG_FILE"
+    say "${GREEN_REGULAR}" "    ✓ Library: $LIBRARY_XML now lists $added ZIM(s)"
     # The second change event, in its own process; it must not hold the ZIM directory lock (fd 9) after the run
     (exec 9<&-; sleep 2; touch "$LIBRARY_XML" 2>/dev/null) >/dev/null 2>&1 &
     return 0
   fi
   rm -f "$tmp"
-  echo -e "${RED_BOLD}    ✗ Library: could not write $LIBRARY_XML${CLEAR}"
-  echo "✗ Library: could not write $LIBRARY_XML" >>"$LOG_FILE"
+  say "${RED_BOLD}" "    ✗ Library: could not write $LIBRARY_XML"
   LibraryFailed=1
   return 1
 }
@@ -922,8 +894,7 @@ main() {
   rebuild_library
 
   echo
-  echo -e "${YELLOW_BOLD}3. Processing ZIM(s)...${CLEAR}"
-  echo "3. Processing ZIM(s)..." >> "$LOG_FILE"
+  say "${YELLOW_BOLD}" "3. Processing ZIM(s)..."
   echo
 
   AnyDownloads=0
@@ -1053,8 +1024,7 @@ main() {
     echo
   done
 
-  echo -e "${YELLOW_BOLD}4. Downloading New ZIM(s)...${CLEAR}"
-  echo -e "4. Downloading New ZIM(s)..." >> "$LOG_FILE"
+  say "${YELLOW_BOLD}" "4. Downloading New ZIM(s)..."
   echo
 
 
@@ -1157,8 +1127,7 @@ main() {
           echo "Skipping checksum for torrent : $OldZIM. If the download has been completed, please delete the .torrent if you want me to verify the checksum." >>"$LOG_FILE"
         else
           # actually verify the file
-          echo -e "${BLUE_REGULAR}    Calculating checksum for : $OldZIM${CLEAR}"
-          echo "Calculating checksum for : $OldZIM" >>"$LOG_FILE"
+          say "${BLUE_REGULAR}" "    Calculating checksum for : $OldZIM"
           { [[ $Action -eq $ACT_UPDATE ]] || [[ $Action -eq $ACT_VERIFY_ONLINE ]]; } && write_checksum_file "$OldZIM" "$ExpectedHash"
           # An unknown expected size (failed meta4 fetch) is "cannot verify", never "corrupt"
           if [[ $Action -eq $ACT_UPDATE ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
@@ -1166,11 +1135,9 @@ main() {
             if [[ $DEBUG -eq 0 ]]; then
               if [[ $SKIP_PURGE -eq 0 ]]; then
                 # The corrupt file stays until its replacement is verified (it is downloaded into a .part file)
-                echo -e "${RED_BOLD}    ✗ Status : File size verification failed, downloading a replacement${CLEAR}"
-                echo "✗ Status : File size verification failed, downloading a replacement" >>"$LOG_FILE"
+                say "${RED_BOLD}" "    ✗ Status : File size verification failed, downloading a replacement"
               else
-                echo -e "${RED_BOLD}    ✗ Status : File size verification failed but purge skipped${CLEAR}"
-                echo "✗ Status : File size verification failed but purge skipped" >>"$LOG_FILE"
+                say "${RED_BOLD}" "    ✗ Status : File size verification failed but purge skipped"
                 AnyVerifyFailed=1
               fi
             else
@@ -1214,11 +1181,9 @@ main() {
             if [[ $DEBUG -eq 0 ]]; then
               if [[ $SKIP_PURGE -eq 0 ]]; then
                 # The corrupt file stays until its replacement is verified (it is downloaded into a .part file)
-                echo -e "${RED_BOLD}    ✗ Status : Checksum failed, downloading a replacement${CLEAR}"
-                echo "✗ Status : Checksum failed, downloading a replacement" >>"$LOG_FILE"
+                say "${RED_BOLD}" "    ✗ Status : Checksum failed, downloading a replacement"
               else
-                echo -e "${RED_BOLD}    ✗ Status : Checksum failed but purge was skipped${CLEAR}"
-                echo "✗ Status : Checksum failed but purge was skipped" >>"$LOG_FILE"
+                say "${RED_BOLD}" "    ✗ Status : Checksum failed but purge was skipped"
                 AnyVerifyFailed=1
                 echo
                 continue
@@ -1233,8 +1198,7 @@ main() {
             RequiresDownload=1
             echo
           else
-            echo -e "${GREEN_BOLD}    ✓ Status : Checksum passed${CLEAR}"
-            echo "✓ Status : Checksum passed" >>"$LOG_FILE"
+            say "${GREEN_BOLD}" "    ✓ Status : Checksum passed"
             VerifiedZIMs+=("$OldZIM")
 
             [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>"$LOG_FILE"
@@ -1281,8 +1245,7 @@ main() {
             AnyDownloadFailed=1
             # wget leaves a partial or empty .torrent behind, which would be mistaken for a finished one next run
             rm -f "$FilePath"
-            echo -e "${RED_BOLD}    ✗ Status : Torrent download failed${CLEAR}"
-            echo "✗ Status : Torrent download failed" >>"$LOG_FILE"
+            say "${RED_BOLD}" "    ✗ Status : Torrent download failed"
             echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
             echo
           fi
@@ -1356,19 +1319,17 @@ main() {
       [[ -n "$DownloadTarget" ]] && CheckPath="$DownloadTarget"
       CheckName="${CheckPath##*/}"
 
-      [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : Download failed${CLEAR}" && echo "✗ Status : Download failed" >>"$LOG_FILE"
+      [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -eq 1 ]] && say "${RED_BOLD}" "    ✗ Status : Download failed"
 
       # Never purge on an unverified file: whatever we downloaded, or are about to replace the old ZIM with, must match
       # the size published in the meta4. The catalog length is rounded to whole KiB, so it is no substitute.
       if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
         ActualSize=$(stat -c %s "$CheckPath" 2>/dev/null)
         if ! [[ "$ExpectedSize" =~ ^[0-9]+$ ]]; then
-          echo -e "${RED_BOLD}    ✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM${CLEAR}"
-          echo "✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM" >>"$LOG_FILE"
+          say "${RED_BOLD}" "    ✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM"
           DownloadFailed=1
         elif [[ "$ActualSize" != "$ExpectedSize" ]]; then
-          echo -e "${RED_BOLD}    ✗ Status : File size verification failed (expected $ExpectedSize, found ${ActualSize:-no file})${CLEAR}"
-          echo "✗ Status : File size verification failed (expected $ExpectedSize, found ${ActualSize:-no file})" >>"$LOG_FILE"
+          say "${RED_BOLD}" "    ✗ Status : File size verification failed (expected $ExpectedSize, found ${ActualSize:-no file})"
           DownloadFailed=1
         fi
       fi
@@ -1380,8 +1341,7 @@ main() {
         if ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]]; then
           # -c promises a checksum-verified replacement: without a published sha256 the old ZIM must stay
           if [[ $DEBUG -eq 0 ]]; then
-            echo -e "${RED_BOLD}    ✗ No valid sha256 published for $NewZIM, cannot verify its checksum. Old ZIM kept.${CLEAR}"
-            echo "✗ No valid sha256 published for $NewZIM, cannot verify its checksum. Old ZIM kept." >>"$LOG_FILE"
+            say "${RED_BOLD}" "    ✗ No valid sha256 published for $NewZIM, cannot verify its checksum. Old ZIM kept."
             DownloadFailed=1
           else
             echo -e "${YELLOW_BOLD}    *** Simulated *** No valid sha256 published for $NewZIM, the checksum could not be verified${CLEAR}"
@@ -1414,8 +1374,7 @@ main() {
           # List the new ZIM before the old one is purged, so kiwix-serve never lacks this title
           rebuild_library
         else
-          echo -e "${RED_BOLD}    ✗ Status : Could not rename $PartPath to $NewZIMPath${CLEAR}"
-          echo "✗ Status : Could not rename $PartPath to $NewZIMPath" >>"$LOG_FILE"
+          say "${RED_BOLD}" "    ✗ Status : Could not rename $PartPath to $NewZIMPath"
           DownloadFailed=1
         fi
       fi
@@ -1429,8 +1388,7 @@ main() {
       # A failed .part download is resumed with wget -c next run, unless it is larger than published (it cannot be)
       if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ "$CheckPath" == "$PartPath" ]] && [[ -f "$PartPath" ]]; then
         if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$PartPath") -gt $ExpectedSize ]]; then
-          echo -e "${RED_BOLD}    ✗ Removing $PartPath: it is larger than published and cannot be resumed${CLEAR}"
-          echo "✗ Removing $PartPath: it is larger than published and cannot be resumed" >>"$LOG_FILE"
+          say "${RED_BOLD}" "    ✗ Removing $PartPath: it is larger than published and cannot be resumed"
           rm -f "$PartPath"
         else
           ResumableParts+=("$PartPath")
@@ -1450,34 +1408,27 @@ main() {
 
       ########################################
 
-      echo -e "${BLUE_REGULAR}    Old : $OldZIM${CLEAR}"
-      echo "Old : $OldZIM" >>"$LOG_FILE"
-      echo -e "${BLUE_BOLD}    New : $NewZIM${CLEAR}"
-      echo "New : $NewZIM" >>"$LOG_FILE"
+      say "${BLUE_REGULAR}" "    Old : $OldZIM"
+      say "${BLUE_BOLD}" "    New : $NewZIM"
       # Check for the new ZIM on disk.
       if [[ -f "$NewZIMPath" ]]; then # New ZIM found
         if [[ $DEBUG -eq 0 ]]; then
           if [[ "$OldZIMPath" == "$NewZIMPath" ]]; then
-            echo -e "${GREEN_BOLD}    ✓ Status : New ZIM downloaded successfully.${CLEAR}"
-            echo "✓ Status : New ZIM downloaded successfully." >>"$LOG_FILE"
+            say "${GREEN_BOLD}" "    ✓ Status : New ZIM downloaded successfully."
           else
-            echo -e "${GREEN_BOLD}    ✓ Status : New ZIM downloaded successfully. Old ZIM purged.${CLEAR}"
-            echo "✓ Status : New ZIM downloaded successfully. Old ZIM purged." >>"$LOG_FILE"
+            say "${GREEN_BOLD}" "    ✓ Status : New ZIM downloaded successfully. Old ZIM purged."
             [[ -f "$OldZIMPath" ]] && rm "$OldZIMPath" && rm "$OldZIMPath.sha256" 2>/dev/null # Purge old ZIM
             rebuild_library
           fi
         else
-          echo -e "${GREEN_BOLD}    ✓ Status : *** Simulated ***${CLEAR}"
-          echo "✓ Status : *** Simulated ***" >>"$LOG_FILE"
+          say "${GREEN_BOLD}" "    ✓ Status : *** Simulated ***"
         fi
       else # New ZIM not found. Something went wrong, so we will skip this purge.
         if [[ $DEBUG -eq 0 ]]; then
-          echo -e "${RED_BOLD}    ✗ Status : New ZIM failed verification. Old ZIM not purged.${CLEAR}"
-          echo "✗ Status : New ZIM failed verification. Old ZIM not purged." >>"$LOG_FILE"
+          say "${RED_BOLD}" "    ✗ Status : New ZIM failed verification. Old ZIM not purged."
         else
           if [[ $RequiresDownload -eq 1 ]]; then
-            echo -e "${GREEN_BOLD}    ✓ Status : *** Simulated *** New zim exists, old zim purged${CLEAR}"
-            echo "✓ Status : *** Simulated *** New zim exists, old zim purged" >>"$LOG_FILE"
+            say "${GREEN_BOLD}" "    ✓ Status : *** Simulated *** New zim exists, old zim purged"
           else
             echo -e "${YELLOW_BOLD}    ✗ Status : *** Simulated *** Zim was skipped, and will not be purged${CLEAR}"
             echo "✗ Status : *** Simulated *** Zim not purged" >>"$LOG_FILE"
@@ -1494,8 +1445,7 @@ main() {
     done
 
   else
-    echo -e "${GREEN_REGULAR}    ✓ Download: Nothing to download.${CLEAR}"
-    echo "✓ Download: Nothing to download." >> "$LOG_FILE"
+    say "${GREEN_REGULAR}" "    ✓ Download: Nothing to download."
     echo
   fi
 
@@ -1513,8 +1463,7 @@ main() {
     exit 1
   fi
   if [[ $ForcedDryRun -eq 1 ]]; then
-    echo -e "${RED_BOLD}✗ -d was given but the ZIM directory is not writable, so nothing was changed${CLEAR}"
-    echo "✗ -d was given but the ZIM directory is not writable, so nothing was changed" >> "$LOG_FILE"
+    say "${RED_BOLD}" "✗ -d was given but the ZIM directory is not writable, so nothing was changed"
     exit 1
   fi
   if [[ $AnyVerifyFailed -eq 1 ]]; then
