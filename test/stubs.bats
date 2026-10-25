@@ -105,15 +105,17 @@ setup() {
 }
 
 @test "stubs: fixtures agree with each other (length, size, sha256)" {
-  local meta4 file size sha
+  local meta4 file size sha length
   for meta4 in "$FAKE_FIXTURES"/remote/zim/*/*.zim.meta4; do
     file="${meta4%.meta4}"
     size=$(stat -c %s "$file")
+    # Like the real catalog: length is the size rounded up to whole KiB.
+    length=$(( (size + 1023) / 1024 * 1024 ))
     sha=$(sha256sum "$file" | cut -d' ' -f1)
     grep -q "<size>$size</size>" "$meta4"
     grep -q "<hash type=\"sha-256\">$sha</hash>" "$meta4"
     grep -q "^$sha  $(basename "$file")\$" "$file.sha256"
-    grep -q "href=\"https://download.kiwix.test/zim/${file#*/remote/zim/}.meta4\" length=\"$size\"" "$FAKE_FIXTURES/catalog.xml"
+    grep -q "href=\"https://download.kiwix.test/zim/${file#*/remote/zim/}.meta4\" length=\"$length\"" "$FAKE_FIXTURES/catalog.xml"
   done
 }
 

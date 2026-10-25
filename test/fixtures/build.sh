@@ -12,9 +12,10 @@
 # The feed's own <updated> is the placeholder __NOW__; the wget stub replaces
 # it at serve time so a cached kiwix-index is always "fresh" within a test.
 #
-# Payload sizes are multiples of 1024 on purpose. The real catalog's
-# length="" attribute is the file size rounded up to whole KiB, while the
-# .meta4 <size> is exact; with KiB-multiple payloads both agree.
+# The real catalog's length="" attribute is the file size rounded up to whole
+# KiB, while the .meta4 <size> is exact. The wiktionary payload is deliberately
+# not a KiB multiple, so any code that trusts the catalog length as the exact
+# size fails the download tests.
 
 set -eu
 
@@ -25,7 +26,7 @@ mirror="https://mirror.kiwix.test"
 # category  file-name-without-.zim  size-in-bytes  entry-date
 entries=(
   "wikipedia  wikipedia_en_test_2026-01    4096   2026-01-15"
-  "wiktionary wiktionary_fr_test_2026-02a  3072   2026-02-20"
+  "wiktionary wiktionary_fr_test_2026-02a  3000   2026-02-20"
   "other      small_test_2025-12           1024   2025-12-01"
   "other      big_test_2026-03             16384  2026-03-10"
 )

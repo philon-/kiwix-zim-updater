@@ -193,3 +193,12 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run grep -c 'meta4?country=$' "$FAKE_WGET_LOG"
   assert_output '1'
 }
+
+@test "download: -t with a failed torrent download leaves no partial .torrent" {
+  make_local_zim "$OLD_WP"
+  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01.zim.torrent
+  run_updater -d -t "$ZIMS"
+  assert_output --partial 'Torrent download failed'
+  [[ ! -e "$ZIMS/$NEW_WP.torrent" ]]
+  [[ -f "$ZIMS/$OLD_WP" ]]
+}

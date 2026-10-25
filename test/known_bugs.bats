@@ -28,7 +28,6 @@ keep_copy() {
 # F: data safety
 
 @test "F1: a failed download (wget exit 4) keeps the old ZIM" {
-  skip "F1: wget status is never checked; the partial file passes and the old ZIM is purged"
   make_local_zim "$OLD_WP"
   keep_copy "$OLD_WP"
   export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
@@ -39,7 +38,6 @@ keep_copy() {
 }
 
 @test "F1: a short download with wget exit 0 keeps the old ZIM (size check without -c)" {
-  skip "F1: size is only verified with -c; a truncated file purges the old ZIM"
   make_local_zim "$OLD_WP"
   keep_copy "$OLD_WP"
   export FAKE_WGET_SHORT=wikipedia_en_test_2026-01
@@ -48,7 +46,6 @@ keep_copy() {
 }
 
 @test "F1: with no meta4 and a short download, the old ZIM is kept" {
-  skip "F1: no size fallback when the meta4 fetch fails; the old ZIM is purged"
   make_local_zim "$OLD_WP"
   keep_copy "$OLD_WP"
   export FAKE_WGET_META_FAIL=1 FAKE_WGET_SHORT=wikipedia_en_test_2026-01

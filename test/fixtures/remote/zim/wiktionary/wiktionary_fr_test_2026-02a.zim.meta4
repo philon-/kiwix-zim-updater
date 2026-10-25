@@ -9,14 +9,14 @@
   </publisher>
 
   <file name="wiktionary_fr_test_2026-02a.zim">
-    <size>3072</size>
+    <size>3000</size>
 
     <!-- internal id: 2 -->
-    <hash type="md5">d0db303f3f541aeef0159e47675e5907</hash>
-    <hash type="sha-1">ba28e337c895fa3daf6675c11cb0cec0e6f01077</hash>
-    <hash type="sha-256">73b73b2bc2f91a2d68f6364bad5a362ad1e47d4f946e32e450c907076dc68c8f</hash>
+    <hash type="md5">014f97124d87413d0437ec3e295c5835</hash>
+    <hash type="sha-1">7afb87475fb39cd2f7d37dbb50252a6c408aa6e2</hash>
+    <hash type="sha-256">657f6d03844642cd24036dae28d5c397321b44d155bde066928b436bcb0660e2</hash>
     <pieces length="4194304" type="sha-1">
-      <hash>ba28e337c895fa3daf6675c11cb0cec0e6f01077</hash>
+      <hash>7afb87475fb39cd2f7d37dbb50252a6c408aa6e2</hash>
     </pieces>
 
     <!-- Mirrors which handle this country (TEST): -->

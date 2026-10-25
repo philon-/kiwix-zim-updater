@@ -396,6 +396,13 @@ detect_wget_flavor() {
   fi
 }
 
+# download_file - Download (or resume) $2 into $1, showing progress and logging it. Returns wget's own exit status,
+# not tee's.
+download_file() {
+  wget -q --show-progress --progress=bar:force -c -O "$1" "$2" 2>&1 | tee -a download.log
+  return "${PIPESTATUS[0]}"
+}
+
 # mirror_search - Find ZIM URL Priority #1 mirror from meta4 Function
 mirror_search() {
   IsMirror=0
@@ -814,33 +821,58 @@ if [ $AnyDownloads -eq 1 ]; then
       if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
         FilePath="$FilePath.torrent"
         if [[ -f "$LockFilePath" ]]; then
-          [[ $DEBUG -eq 0 ]] && wget -q --show-progress --progress=bar:force -c -O "$FilePath" "$DownloadURL" 2>&1 | tee -a download.log # Download new ZIM
+          [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
           [[ $DEBUG -eq 1 ]] && echo "Continue Download : $FilePath" >>download.log
         elif [[ -f $FilePath ]]; then # New ZIM already found, we don't need to download it.
           [[ $DEBUG -eq 1 ]] && echo "Download : New Torrent already exists on disk. Skipping download." >>download.log
         else # New ZIM not found, so we'll go ahead and download it.
-          [[ $DEBUG -eq 0 ]] && wget -q --show-progress --progress=bar:force -c -O "$FilePath" "$DownloadURL" 2>&1 | tee -a download.log # Download new ZIM
+          [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
           [[ $DEBUG -eq 1 ]] && echo "Download : $FilePath" >>download.log
         fi
 
+        if [[ $DownloadFailed -eq 1 ]]; then
+          # wget leaves a partial or empty .torrent behind, which would be mistaken for a finished one next run
+          rm -f "$FilePath"
+          echo -e "${RED_BOLD}    ✗ Status : Torrent download failed${CLEAR}"
+          echo "✗ Status : Torrent download failed" >>download.log
+          echo " !!! DOWNLOAD FAILED !!!" >>download.log
+          echo
+        fi
         continue
       else
         # Before we actually download, let's just check to see that it isn't already in the folder.
         if [[ -f "$LockFilePath" ]]; then
-          [[ $DEBUG -eq 0 ]] && wget -q --show-progress --progress=bar:force -c -O "$FilePath" "$DownloadURL" 2>&1 | tee -a download.log # Download new ZIM
+          [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
           [[ $DEBUG -eq 1 ]] && echo "Continue Download : $FilePath" >>download.log
         elif [[ -f $FilePath ]]; then # New ZIM already found, we don't need to download it.
           [[ $DEBUG -eq 1 ]] && echo "Download : New ZIM already exists on disk. Skipping download." >>download.log
         else # New ZIM not found, so we'll go ahead and download it.
           [[ $DEBUG -eq 0 ]] && touch "$LockFilePath"
-          [[ $DEBUG -eq 0 ]] && wget -q --show-progress --progress=bar:force -c -O "$FilePath" "$DownloadURL" 2>&1 | tee -a download.log # Download new ZIM
+          [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
           [[ $DEBUG -eq 1 ]] && echo "Download : $FilePath" >>download.log
         fi
       fi
     fi
 
+    [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : Download failed${CLEAR}" && echo "✗ Status : Download failed" >>download.log
+
+    # Never purge on an unverified file: whatever we downloaded, or are about to replace the old ZIM with, must match
+    # the size published in the meta4. The catalog length is rounded to whole KiB, so it is no substitute.
+    if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
+      ActualSize=$(stat -c %s "$NewZIMPath" 2>/dev/null)
+      if ! [[ "$ExpectedSize" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED_BOLD}    ✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM${CLEAR}"
+        echo "✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM" >>download.log
+        DownloadFailed=1
+      elif [[ "$ActualSize" != "$ExpectedSize" ]]; then
+        echo -e "${RED_BOLD}    ✗ Status : File size verification failed (expected $ExpectedSize, found ${ActualSize:-no file})${CLEAR}"
+        echo "✗ Status : File size verification failed (expected $ExpectedSize, found ${ActualSize:-no file})" >>download.log
+        DownloadFailed=1
+      fi
+    fi
+
     [[ $DEBUG -eq 0 ]] && echo "$ExpectedHash $NewZIM" 2>/dev/null 1>"$NewZIMPath.sha256"
-    if [[ $CALCULATE_CHECKSUM -eq 1 ]]; then
+    if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]]; then
       echo -e "${BLUE_REGULAR}    Calculating checksum for : $NewZIMPath${CLEAR}"
       if [[ $(du -b "$NewZIMPath" 2>/dev/null | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
         if [[ $DEBUG -eq 0 ]]; then
@@ -877,7 +909,7 @@ if [ $AnyDownloads -eq 1 ]; then
       [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>download.log
       [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>download.log
       [[ $DEBUG -eq 0 ]] && [[ $SKIP_PURGE -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm "$LockFilePath"
-      [[ $DEBUG -eq 0 ]] && [[ $VERIFY_LIBRARY -eq 1 ]] && [[ $RequiresDownload -eq 1 ]] && rm "$LockFilePath"
+      [[ $DEBUG -eq 0 ]] && [[ $VERIFY_LIBRARY -eq 1 ]] && [[ $RequiresDownload -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm "$LockFilePath"
       continue
     fi
 
