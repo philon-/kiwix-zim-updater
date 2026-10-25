@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Unattended safety: free space (--min-free), network and metadata outages, a read-only ZIM directory, one instance
-# per ZIM directory (H6), globals that must not leak in from the environment (M4), and no clear without a terminal.
+# per ZIM directory (H6) and globals that must not leak in from the environment (M4).
 
 setup() {
   load 'helpers/common'
@@ -254,14 +254,4 @@ GiB=1073741824
   assert_success
   refute_output --partial 'is not a directory'
   assert_output --partial "- $WP_OLD:"
-}
-
-###############################################################################
-# Output
-
-@test "clear is not called when stdout is not a terminal (M2)" {
-  make_local_zim "$WP_OLD"
-  run_updater "$ZIMS"
-  assert_success
-  refute_nonempty "$FAKE_CLEAR_LOG"
 }

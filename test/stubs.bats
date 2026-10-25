@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Self-tests for the harness: the wget/git/clear stubs and the fixtures.
+# Self-tests for the harness: the wget/git/df/kiwix-manage stubs and the fixtures.
 
 setup() {
   load 'helpers/common'

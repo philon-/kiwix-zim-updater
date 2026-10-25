@@ -32,7 +32,7 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 | `test/makefile.bats` | The Makefile's tool selection (`make -n` only). |
 | `test/helpers/common.bash` | Shared setup and helpers. It creates a sandbox, copies the script there and prepends the stub `PATH`. It also names the fixtures (`WP_NEW`, `WP_OLD`, ...) and holds the shared assertions, such as `assert_zim_unchanged`. |
 | `test/helpers/container.bash` | Shared setup of `test/docker-smoke.sh` and `test/library-integration.sh`: container engine, image check, checks and cleanup. |
-| `test/helpers/bin/` | Stubs for `wget`, `clear`, `git`, `df` and `kiwix-manage`, so tests never touch the network or the real repository, and free-space checks do not depend on the machine. |
+| `test/helpers/bin/` | Stubs for `wget`, `git`, `df` and `kiwix-manage`, so tests never touch the network or the real repository, and free-space checks do not depend on the machine. |
 | `test/fixtures/` | A fake catalog, `.meta4` files and payloads served by the `wget` stub. `build.sh` regenerates them. |
 | `test/libs/` | Pinned git submodules for bats-core, bats-support and bats-assert. |
 | `Dockerfile`, `.dockerignore` | The container image (`debian:trixie-slim`, non-root, `tini`). |

@@ -66,7 +66,6 @@ AnyVerifyFailed=0
 ResumableParts=()
 # ZIMs that -f verified as good in this run: a .part next to one of them is a replacement that is no longer needed
 VerifiedZIMs=()
-CountryCodeWarning="" # set by an invalid -l, shown after the screen is cleared
 # Per-file download state, reset again for every ZIM in the download loop
 DownloadFailed=0
 IsMirror=0
@@ -826,7 +825,7 @@ parse_args() {
           COUNTRY_CODE=$1
         else
           COUNTRY_CODE=""
-          CountryCodeWarning="Invalid country code '$1', falling back to default kiwix behavior"
+          echo -e "${YELLOW_BOLD}Invalid country code '$1', falling back to default kiwix behavior${CLEAR}" >&2
           echo "Invalid country code, falling back to default kiwix behavior" >> "$LOG_FILE"
         fi
         shift # discard value
@@ -1448,13 +1447,10 @@ main() {
   parse_args "$@"
   set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters that we skipped earlier
 
-  [[ -t 1 ]] && clear # Clear screen, but only on a terminal (under cron there is no TERM to clear)
-
   if [[ $CALCULATE_CHECKSUM -ne 0 ]] && [[ $DOWNLOAD_METHOD -ne 1 ]]; then
     echo -e "${RED_BOLD}Calculating Checksum not available with torrenting. Aborting.${CLEAR}" >&2
     exit 2
   fi
-  [[ -n "$CountryCodeWarning" ]] && echo -e "${YELLOW_BOLD}$CountryCodeWarning${CLEAR}" >&2
 
   print_banner
 

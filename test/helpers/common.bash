@@ -10,7 +10,7 @@
 #                  never finds a .git and never touches this repository)
 #   $SANDBOX/run   CWD for the run; download.log and kiwix-index land here
 #   $SANDBOX/zims  the ZIM directory passed to the script ($ZIMS)
-# and PATH starts with test/helpers/bin, so wget, git and clear are stubs.
+# and PATH starts with test/helpers/bin, so wget, git, df and kiwix-manage are stubs.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STUB_BIN="$REPO_ROOT/test/helpers/bin"
@@ -61,7 +61,6 @@ common_setup() {
   export FAKE_FIXTURES="$FIXTURES_SRC"
   export FAKE_WGET_LOG="$SANDBOX/wget.log"
   export FAKE_GIT_LOG="$SANDBOX/git.log"
-  export FAKE_CLEAR_LOG="$SANDBOX/clear.log"
   export FAKE_KIWIX_MANAGE_LOG="$SANDBOX/kiwix-manage.log"
   export FAKE_KIWIX_MANAGE_SEEN="$SANDBOX/kiwix-manage.seen"
   # df stub: plenty of free space unless a test says otherwise (1 TiB)
@@ -154,7 +153,7 @@ download_log() {
 }
 
 # make_tooldir [<tool to leave out>...]
-# Build $SANDBOX/tools ($TOOLDIR) with symlinks to the real tools the script needs, plus the wget, git, clear, df and
+# Build $SANDBOX/tools ($TOOLDIR) with symlinks to the real tools the script needs, plus the wget, git, df and
 # kiwix-manage stubs, and leave out the named tools. Run the script with PATH="$TOOLDIR" to hide a tool from it.
 make_tooldir() {
   local tooldir="$SANDBOX/tools" tool src skip
@@ -169,7 +168,7 @@ make_tooldir() {
     src="$(PATH="$base_path" command -v "$tool")" || continue
     ln -s "$src" "$tooldir/$tool"
   done
-  for tool in wget git clear df kiwix-manage; do
+  for tool in wget git df kiwix-manage; do
     for skip in "$@"; do
       [[ "$tool" == "$skip" ]] && continue 2
     done
