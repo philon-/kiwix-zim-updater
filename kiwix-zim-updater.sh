@@ -302,9 +302,16 @@ flags() {
   # Now we need to check for ZIM files.
   shopt -s nullglob # This is in case there are no matching files
 
-  # Load all found ZIM(s) w/path into LocalZIMArray
-  IFS=$'\n' read -r -d '' -a LocalZIMArray < <(ls -1 "$ZIMPath" | grep -iP "\.zim$")
-  unset IFS
+  # Load all found ZIM(s) into LocalZIMArray: names without the path, regular files only, hidden files skipped like
+  # `ls -1` does. The glob sorts like `ls -1` (by LC_COLLATE), so the shadowing check below sees the same order.
+  LocalZIMArray=()
+  for zimFile in "$ZIMPath"*.[zZ][iI][mM]; do
+    zimFile="${zimFile##*/}"
+    [[ "$zimFile" == .* ]] && continue
+    # The line-based parsing below would split a name with a newline and mistake it for another ZIM: leave it alone
+    [[ "$zimFile" == *$'\n'* ]] && continue
+    [[ -f "$ZIMPath$zimFile" ]] && LocalZIMArray+=("$zimFile")
+  done
 
   for index in "${!LocalZIMArray[@]}" ; do
     duplicated=0

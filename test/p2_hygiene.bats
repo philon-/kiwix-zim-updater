@@ -53,3 +53,54 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   refute_output --partial 'is not a directory'
   assert_output --partial "- $OLD_WP:"
 }
+
+###############################################################################
+# M1: the ZIM directory is listed with a glob, not by parsing ls.
+
+@test "M1: a ZIM name with spaces is listed as one ZIM" {
+  make_local_zim "$OLD_WP"
+  make_local_zim 'my notes_test_2025-01.zim'
+  run_updater "$ZIMS"
+  assert_success
+  assert_output --partial '✗ my notes_test_2025-01.zim  No online match found.'
+  assert_output --partial "✓ $OLD_WP  [wikipedia]"
+  assert_output --partial '2 ZIM(s) found.'
+}
+
+@test "M1: an upper-case .ZIM extension is still found and matched" {
+  make_local_zim wikipedia_en_test_2025-12.ZIM
+  run_updater "$ZIMS"
+  assert_success
+  assert_output --partial '✓ wikipedia_en_test_2025-12.ZIM  [wikipedia]'
+  assert_output --partial '1 ZIM(s) found.'
+}
+
+@test "M1: a directory named like a ZIM is ignored" {
+  make_local_zim "$OLD_WP"
+  mkdir "$ZIMS/x.zim" "$ZIMS/wiktionary_fr_test_2026-02.zim"
+  run_updater "$ZIMS"
+  assert_success
+  refute_output --partial 'x.zim'
+  refute_output --partial 'wiktionary_fr_test_2026-02.zim'
+  assert_output --partial '1 ZIM(s) found.'
+}
+
+@test "M1: QUOTING_STYLE in the environment does not hide the ZIMs" {
+  make_local_zim "$OLD_WP"
+  export QUOTING_STYLE=shell-always
+  run_updater "$ZIMS"
+  assert_success
+  assert_output --partial "- $OLD_WP:"
+  assert_output --partial 'Update found!'
+}
+
+@test "M1: a ZIM name containing a newline is left alone" {
+  make_local_zim $'notes\nwikipedia_en_test_2025-12.zim' 'my notes'
+  make_local_zim small_test_2025-12.zim --from-remote zim/other/small_test_2025-12.zim
+  run_updater -d "$ZIMS"
+  assert_success
+  run cat "$ZIMS/"$'notes\nwikipedia_en_test_2025-12.zim'
+  assert_output 'my notes'
+  run wget_downloads
+  assert_output ''
+}
