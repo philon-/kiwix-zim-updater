@@ -21,3 +21,38 @@ setup() {
   assert_line --partial '/usr/bin/shellcheck --severity='
   refute_output --partial 'docker run'
 }
+
+@test "make lint: stops with a clear message without shellcheck and without a container engine" {
+  run make -n -C "$REPO_ROOT" lint SHELLCHECK_LOCAL= CONTAINER_ENGINE=
+  assert_failure
+  assert_output --partial 'lint: neither shellcheck nor podman or docker found'
+}
+
+@test "make docker-build: podman builds in the docker format, which keeps HEALTHCHECK" {
+  run make -n -C "$REPO_ROOT" docker-build CONTAINER_ENGINE=/usr/bin/podman IMAGE=img:t
+  assert_success
+  assert_line '/usr/bin/podman build --format docker -t img:t .'
+}
+
+@test "make docker-build: docker builds without --format" {
+  run make -n -C "$REPO_ROOT" docker-build CONTAINER_ENGINE=docker IMAGE=img:t
+  assert_success
+  assert_line --regexp '^docker build +-t img:t \.$'
+}
+
+@test "make docker-build: stops with a clear message without a container engine" {
+  run make -n -C "$REPO_ROOT" docker-build CONTAINER_ENGINE=
+  assert_failure
+  assert_output --partial 'docker-build: neither podman nor docker found'
+}
+
+@test "make docker-test and library-test: build the image first, then run their script" {
+  local target script
+  for target in docker-test:docker-smoke.sh library-test:library-integration.sh; do
+    script="${target#*:}"
+    run make -n --no-print-directory -C "$REPO_ROOT" "${target%%:*}" CONTAINER_ENGINE=docker IMAGE=img:t
+    assert_success
+    assert_line --index 0 --regexp '^docker build +-t img:t \.$'
+    assert_line --index 1 "CONTAINER_ENGINE=\"docker\" IMAGE=\"img:t\" test/$script"
+  done
+}

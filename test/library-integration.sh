@@ -8,8 +8,8 @@
 #    the code a run uses, with the image's kiwix-manage).
 # 3. Serves it with the official kiwix-serve image (--library --monitorLibrary, ZIM directory mounted read-only) and
 #    checks that an added ZIM appears and a purged one disappears, without restarting kiwix-serve.
-# Network access: pulling images and apt packages only. Nothing contacts kiwix.org, and the updater image builds
-# with `make docker-test` first if IMAGE does not exist.
+# Network access: pulling images and apt packages only. Nothing contacts kiwix.org. `make library-test` builds the
+# updater image (IMAGE) first with `make docker-build`.
 
 set -u
 
@@ -43,8 +43,8 @@ echo 'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAAQklEQVR4nO3OQQ0AIAwAsUlBGt
   base64 -d >"$TMP/in/icon.png"
 
 if ! "$ENGINE" image inspect "$IMAGE" >/dev/null 2>&1; then
-  echo "== Building $IMAGE"
-  "$ENGINE" build -q -t "$IMAGE" "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" >/dev/null || { echo "build failed"; exit 1; }
+  echo "library-test: no image $IMAGE; build it with make docker-build" >&2
+  exit 1
 fi
 
 # make_zims <name> [<name>...] - real ZIMs titled "Title <name>" in $TMP/data

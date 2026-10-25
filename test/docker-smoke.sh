@@ -3,8 +3,8 @@
 #
 #   CONTAINER_ENGINE=docker IMAGE=localhost/kiwix-zim-updater:test test/docker-smoke.sh
 #
-# Builds the image, then runs it offline: every run uses the wget stub and the fixtures from the test harness, so
-# nothing contacts kiwix.org. The only network access is the image build (base image and apt packages).
+# Runs the image that `make docker-build` built, offline: every run uses the wget stub and the fixtures from the test
+# harness, so nothing contacts kiwix.org, and no container gets a network.
 
 set -u
 
@@ -17,13 +17,11 @@ if [[ -z "$ENGINE" ]]; then
   ENGINE="$(command -v podman || command -v docker)" || { echo "docker-test: neither podman nor docker found" >&2; exit 1; }
 fi
 
-build_opts=()
 run_opts=(--rm)
 # No container gets a network: the stubs serve everything, and nothing can reach kiwix.org by mistake
 container_opts=(--network none)
 if [[ "$(basename "$ENGINE")" == podman* ]]; then
-  # The OCI image format drops HEALTHCHECK; keep-id maps the calling user into the container unchanged
-  build_opts+=(--format docker)
+  # keep-id maps the calling user into the container unchanged
   container_opts+=(--userns=keep-id)
 fi
 # Run as the calling user, so the temporary directories below are writable and removable afterwards
@@ -43,12 +41,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "== Building $IMAGE with $ENGINE"
-if ! "$ENGINE" build "${build_opts[@]}" -t "$IMAGE" "$REPO_ROOT"; then
-  echo "docker-test: build failed" >&2
+if ! size="$("$ENGINE" image inspect --format '{{.Size}}' "$IMAGE" 2>/dev/null)"; then
+  echo "docker-test: no image $IMAGE; build it with make docker-build" >&2
   exit 1
 fi
-size="$("$ENGINE" image inspect --format '{{.Size}}' "$IMAGE")"
 echo "== Image size: $(numfmt --to=iec "$size") ($size bytes)"
 
 # Private copies of the stubs and fixtures: relabelling them for SELinux (:z) must not touch the repository

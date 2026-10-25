@@ -119,6 +119,7 @@ Web Download Options:
 ```shell
 git submodule update --init --recursive
 make lint test          # ShellCheck and the bats test suites
+make docker-build       # build the image (podman or docker)
 make docker-test        # build the image and smoke-test it offline
 make library-test       # --library end to end with real ZIMs and the official kiwix-serve
 ```

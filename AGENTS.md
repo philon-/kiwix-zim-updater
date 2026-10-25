@@ -24,7 +24,7 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 | `test/p8_unattended.bats` | Unattended safety: network limits, the `--min-free` reserve, and that an internet outage leaves the ZIM directory unchanged. |
 | `test/unit.bats` | Unit tests. They `source` the script and call its functions directly. |
 | `test/docker_entrypoint.bats` | Tests of the container entrypoint and health check, with a stub updater. No Docker needed. |
-| `test/docker-smoke.sh` | `make docker-test`: builds the image and smoke-tests it offline with the stubs. Not part of `make test`. |
+| `test/docker-smoke.sh` | `make docker-test`: smoke-tests the image (built first by `make docker-build`) offline with the stubs. Not part of `make test`. |
 | `test/library-integration.sh` | `make library-test`: `--library` end to end with real ZIMs (built with zimwriterfs), the image's kiwix-manage and the official kiwix-serve image. Not part of `make test`. |
 | `test/makefile.bats` | The Makefile's tool selection (`make -n` only). |
 | `test/p9_library.bats` | `--library`, with a `kiwix-manage` stub (in `test/helpers/bin/`) that writes the real library format. |
@@ -36,7 +36,7 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 | `docker/docker-entrypoint.sh` | Container entrypoint: maps environment variables to options and runs the script on a schedule from `/state`. |
 | `docker/healthcheck.sh` | Container health check: reads the last run's status from `/state/last-run`. |
 | `compose.example.yaml` | Example Compose file with every environment variable documented. |
-| `Makefile` | `make test`, `make lint`, `make docker-test`, `make library-test`. |
+| `Makefile` | `make test`, `make lint`, `make docker-build`, `make docker-test`, `make library-test`. |
 | `.github/workflows/ci.yml` | CI runs lint and tests on every push and pull request, and `make docker-test` and `make library-test` with Docker. |
 
 Set up and run everything with:
