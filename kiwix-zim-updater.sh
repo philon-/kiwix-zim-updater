@@ -97,17 +97,42 @@ master_scrape() {
     indexIsValid=0
   else
     indexDate="$(head -1 "$INDEX_FILE")"
-    if [[ -z "${indexDate}" ]] || [[ "$(date -u -d "$indexDate" +%s)" -lt "$(date -u -d "1 day ago" +%s)" ]]; then
+    # An index without links (left behind by older versions after a failed fetch) is never reused
+    if [[ -z "${indexDate}" ]] || [[ "$(date -u -d "$indexDate" +%s)" -lt "$(date -u -d "1 day ago" +%s)" ]] || ! grep -qi '<link rel' "$INDEX_FILE"; then
       indexIsValid=0
     fi
   fi
 
   if [[ FORCE_FETCH_INDEX -eq 1 ]] || [[ $indexIsValid -eq 0 ]]; then
-    # both write the file timestamp to the index file and save all of the links to RawLibrary.
-    # Lets defer touching the index until we have actually fetched it
-    RawLibrary="$(wget --show-progress -q -O - "$CatalogURL")"
-    RawLibrary="$(echo "$RawLibrary" | tee --output-error=warn-nopipe >(grep -ioP "(?<=<updated>)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?=Z</updated>)" | head -1 > "$INDEX_FILE") | grep -i 'application/x-zim' | grep -ioP "^\s+\K.*$")"
-    echo "$RawLibrary" >> "$INDEX_FILE"
+    # Fetch the catalog, then cache its timestamp (first line) and all of its links in the index file.
+    # The index is only replaced once the fetch succeeded and parsed, so a failure never caches an empty index.
+    local rawCatalog fetchStatus catalogDate indexTmp
+    rawCatalog="$(wget --show-progress -q -O - "$CatalogURL")"
+    fetchStatus=$?
+    if [[ $fetchStatus -ne 0 ]]; then
+      echo -e "${RED_REGULAR}    ✗ Could not fetch the online catalog (wget exit $fetchStatus). Exiting...${CLEAR}"
+      echo "✗ Could not fetch the online catalog (wget exit $fetchStatus). Exiting..." >> "$LOG_FILE"
+      exit 1
+    fi
+    catalogDate="$(echo "$rawCatalog" | grep -ioP "(?<=<updated>)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?=Z</updated>)" | head -1)"
+    RawLibrary="$(echo "$rawCatalog" | grep -i 'application/x-zim' | grep -ioP "^\s+\K.*$")"
+    unset rawCatalog
+    if [[ -z "$catalogDate" ]]; then
+      echo -e "${RED_REGULAR}    ✗ The online catalog has no <updated> date. Exiting...${CLEAR}"
+      echo "✗ The online catalog has no <updated> date. Exiting..." >> "$LOG_FILE"
+      exit 1
+    fi
+    if [[ -z "$RawLibrary" ]]; then
+      echo -e "${RED_REGULAR}  ✗ No ZIM URLs found. Exiting...${CLEAR}"
+      echo "✗ No ZIM URLs found in the online catalog. Exiting..." >> "$LOG_FILE"
+      exit 1
+    fi
+    indexTmp="$INDEX_FILE.tmp.$$"
+    if ! { printf '%s\n%s\n' "$catalogDate" "$RawLibrary" > "$indexTmp" && mv -f "$indexTmp" "$INDEX_FILE"; }; then
+      rm -f "$indexTmp"
+      echo -e "${YELLOW_REGULAR}    Could not cache the online catalog in $INDEX_FILE, continuing without it${CLEAR}"
+      echo "Could not cache the online catalog in $INDEX_FILE" >> "$LOG_FILE"
+    fi
   else
     RawLibrary=$(grep -i '<link rel' < "$INDEX_FILE")
   fi

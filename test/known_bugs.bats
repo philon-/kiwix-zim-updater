@@ -217,7 +217,6 @@ EOF
 }
 
 @test "H4: a failed catalog fetch exits 1 and caches no kiwix-index" {
-  skip "H4: the wget status is ignored and an empty index is cached"
   make_local_zim "$OLD_WP"
   export FAKE_WGET_CATALOG_FAIL=1
   run_updater "$ZIMS"

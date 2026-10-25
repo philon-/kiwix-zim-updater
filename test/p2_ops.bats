@@ -164,3 +164,126 @@ teardown() {
   exec 8<&-
   assert_failure 75
 }
+
+###############################################################################
+# H4: the cached catalog index (kiwix-index in the run dir)
+
+INDEX="kiwix-index"
+
+# True if the catalog was requested since the wget log was last cleared.
+catalog_fetched() {
+  grep -qF opds "$FAKE_WGET_LOG"
+}
+
+# Rewrite the date line of the cached index to the given `date -d` string.
+age_index() {
+  local date
+  date="$(date -u -d "$1" +%Y-%m-%dT%H:%M:%S)"
+  sed -i "1s/.*/$date/" "$RUN_DIR/$INDEX"
+}
+
+@test "H4: the index has the date on its first line and one link line per ZIM" {
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  assert_success
+  run head -1 "$RUN_DIR/$INDEX"
+  assert_output --regexp '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$'
+  run tail -n +2 "$RUN_DIR/$INDEX"
+  assert_output "$(grep -i 'application/x-zim' "$FAKE_FIXTURES/catalog.xml" | sed 's/^[[:space:]]*//')"
+  run ls -A "$RUN_DIR"
+  assert_output "$(printf 'download.log\n%s' "$INDEX")"
+}
+
+@test "H4: a fresh cached index is reused without fetching the catalog" {
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  assert_success
+  catalog_fetched
+  cp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
+  : >"$FAKE_WGET_LOG"
+  run_updater "$ZIMS"
+  assert_success
+  assert_output --partial 'Found 4 files online'
+  run catalog_fetched
+  assert_failure
+  cmp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
+}
+
+@test "H4: -g fetches the catalog even with a fresh index" {
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  assert_success
+  : >"$FAKE_WGET_LOG"
+  run_updater -g "$ZIMS"
+  assert_success
+  catalog_fetched
+}
+
+@test "H4: an index older than a day is refreshed" {
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  age_index '2 days ago'
+  : >"$FAKE_WGET_LOG"
+  run_updater "$ZIMS"
+  assert_success
+  catalog_fetched
+  run date -u -d "$(head -1 "$RUN_DIR/$INDEX")" +%s
+  ((output > $(date -u -d '1 hour ago' +%s)))
+}
+
+@test "H4: a cached index without links is not reused" {
+  make_local_zim "$OLD_WP"
+  date -u +%Y-%m-%dT%H:%M:%S >"$RUN_DIR/$INDEX"
+  run_updater "$ZIMS"
+  assert_success
+  catalog_fetched
+  assert_output --partial 'Found 4 files online'
+}
+
+@test "H4: a failed -g refetch exits 1 and leaves the existing index untouched" {
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  cp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
+  export FAKE_WGET_CATALOG_FAIL=1
+  run_updater -g "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'Could not fetch the online catalog'
+  cmp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
+  run download_log
+  assert_output --partial 'Could not fetch the online catalog'
+}
+
+@test "H4: a failed refresh of a stale index exits 1 and leaves it untouched" {
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  age_index '2 days ago'
+  cp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
+  export FAKE_WGET_CATALOG_FAIL=1
+  run_updater "$ZIMS"
+  assert_failure 1
+  cmp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
+  run ls -A "$RUN_DIR"
+  assert_output "$(printf 'download.log\n%s' "$INDEX")"
+}
+
+@test "H4: a catalog without an <updated> date exits 1 and is not cached" {
+  use_fixture_copy
+  sed -i '/<updated>/d' "$FAKE_FIXTURES/catalog.xml"
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'no <updated> date'
+  [[ ! -e "$RUN_DIR/$INDEX" ]]
+}
+
+@test "H4: a catalog without ZIM links exits 1 and does not replace the index" {
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  cp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
+  use_fixture_copy
+  sed -i '/application\/x-zim/d' "$FAKE_FIXTURES/catalog.xml"
+  run_updater -g "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'No ZIM URLs found'
+  cmp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
+}
