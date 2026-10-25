@@ -101,8 +101,9 @@ build_args() {
     checksum=0
   fi
 
-  # Split EXTRA_ARGS on whitespace, without glob expansion
-  read -r -a extra <<<"${EXTRA_ARGS:-}"
+  # Split EXTRA_ARGS on whitespace, newlines included (a multi-line YAML value must not lose its later lines), without
+  # glob expansion. read returns 1 at the end of input, which is expected here.
+  read -r -d '' -a extra <<<"${EXTRA_ARGS:-}" || true
   refuse_self_update "${extra[@]}"
 
   updater_args=()

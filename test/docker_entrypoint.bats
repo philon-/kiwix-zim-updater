@@ -156,6 +156,18 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
   assert_output '<-w> <-c> <--clean-partials> <-u> <-l> <FR> </data>'
 }
 
+@test "entrypoint: a multi-line EXTRA_ARGS keeps every line" {
+  run_once EXTRA_ARGS=$'-S\n-p\n-x 2Gi'
+  run stub_args
+  assert_output '<-w> <-c> <--clean-partials> <-S> <-p> <-x> <2Gi> </data>'
+}
+
+@test "entrypoint: -U on a later line of EXTRA_ARGS is refused too" {
+  run_once EXTRA_ARGS=$'-S\n-U'
+  [[ "$ENTRY_STATUS" -eq 2 ]]
+  [[ "$(stub_runs)" -eq 0 ]]
+}
+
 @test "entrypoint: EXTRA_ARGS are not glob-expanded" {
   touch "$STATE_DIR/match-me"
   run_once EXTRA_ARGS='*'
