@@ -767,7 +767,8 @@ if [ $AnyDownloads -eq 1 ]; then
         echo -e "${BLUE_REGULAR}    Calculating checksum for : $OldZIM${CLEAR}"
         echo "Calculating checksum for : $OldZIM" >>download.log
         [[ ${LocalRequiresDownloadArray[$z]} -ne 2 ]] && write_checksum_file "$OldZIM" "$ExpectedHash"
-        if [[ ${LocalRequiresDownloadArray[$z]} -ne 2 ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
+        # An unknown expected size (failed meta4 fetch) is "cannot verify", never "corrupt"
+        if [[ ${LocalRequiresDownloadArray[$z]} -ne 2 ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
           RequiresDownload=1
           if [[ $DEBUG -eq 0 ]]; then
             if [[ $SKIP_PURGE -eq 0 ]]; then
@@ -785,7 +786,7 @@ if [ $AnyDownloads -eq 1 ]; then
 
           echo
         elif [[ ${#ExpectedHash} -ne 64 ]]; then
-          echo "    This hash doesn't look quite right...skipping"
+          echo -e "${YELLOW_BOLD}    No valid checksum available (metadata unavailable?), cannot verify $OldZIM. Skipping, file kept.${CLEAR}" && echo "Cannot verify $OldZIM: no valid checksum available, file kept" >>download.log
         elif ! hash_matches "$OldZIM" "$ExpectedHash"; then
           # we checked a very old file, but we will choose to not replace it because we cannot, so we will leave it. A regular update will purge it naturally
           [[ ${LocalRequiresDownloadArray[$z]} -eq 2 ]] && echo -e "${RED_BOLD}    Checksum failed, online file not found, continuing${CLEAR}" && echo && continue
@@ -892,7 +893,8 @@ if [ $AnyDownloads -eq 1 ]; then
     fi
 
     [[ $DownloadFailed -ne 1 ]] && write_checksum_file "$NewZIM" "$ExpectedHash"
-    if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]]; then
+    # In -f mode a file that was not (re-)downloaded has already been verified above
+    if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
       echo -e "${BLUE_REGULAR}    Calculating checksum for : $NewZIMPath${CLEAR}"
       if [[ $(du -b "$NewZIMPath" 2>/dev/null | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
         if [[ $DEBUG -eq 0 ]]; then

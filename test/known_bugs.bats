@@ -92,7 +92,6 @@ keep_copy() {
 }
 
 @test "F4: -f -d with a failed meta4 fetch keeps a good cached .sha256" {
-  skip "N3: blocked by N3 (the ZIM, and with it its .sha256, is deleted on an empty expected size)"
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   make_local_sha256 "$NEW_WP"
   cp "$ZIMS/$NEW_WP.sha256" "$SANDBOX/sha256.orig"
@@ -348,12 +347,13 @@ EOF
 }
 
 @test "N3: -f -d with a failed meta4 fetch never deletes a good ZIM" {
-  skip "N3: an empty ExpectedSize fails the size check and the good ZIM is rm'd"
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   make_local_sha256 "$NEW_WP"
   export FAKE_WGET_META_FAIL=1
   run_updater -f -d "$ZIMS"
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
+  assert_output --partial "cannot verify $NEW_WP"
+  refute_output --partial 'Checksum passed'
 }
 
 @test "N4: -S stops new .sha256 files from being written" {
