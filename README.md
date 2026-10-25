@@ -44,7 +44,7 @@ A dry-run does not create, change or delete anything inside the ZIM directory: n
 - writes `download.log` and `kiwix-index` in the directory you run the script from (see below);
 - with `-f`, reads and hashes your ZIMs, which can take a long time on a large library.
 
-If the ZIM directory is not writable, the script says so and carries on as a dry-run even when `-d` is given.
+If the ZIM directory is not writable, the script says so and carries on as a dry-run. When `-d` was given, that run then exits 1, so cron notices that nothing was changed.
 
 ```text
 Bonus: A dry-run/simulation run is not required. If you like to
@@ -80,7 +80,7 @@ Both files are written to the **current directory**, i.e. the directory you run 
 | Code | Meaning |
 |---|---|
 | 0 | Success, including "nothing to update". |
-| 1 | Runtime error: a network or parse failure (catalog or metadata), a missing dependency, no ZIMs found in the ZIM directory, any failed download (including a size or checksum mismatch), and, with `-f`, any ZIM that could not be verified or was found corrupt and kept. |
+| 1 | Runtime error: a network or parse failure (catalog or metadata), a missing dependency, no ZIMs found in the ZIM directory, any failed download (including a size or checksum mismatch), with `-f`, any ZIM that could not be verified or was found corrupt and kept, and `-d` on a ZIM directory that is not writable (the run falls back to dry-run). |
 | 2 | Usage error: an unknown option, a missing or invalid option value, more than one ZIM directory, a missing or invalid ZIM directory, or `-c`/`-f` together with `-t`. The message goes to stderr. |
 | 75 | Another instance is already running on the same ZIM directory. |
 

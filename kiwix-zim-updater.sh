@@ -38,6 +38,8 @@ ARGS=("$@")
 BRANCH="main"
 SELF_UPDATE=0 # -U: update this script from its git clone before running (off by default)
 DEBUG=1 # This forces the script to default to "dry-run/simulation mode"
+# Set when -d was given but the ZIM directory is not writable: the run falls back to dry-run and then exits 1
+ForcedDryRun=0
 MIN_SIZE=0
 MAX_SIZE=0
 CALCULATE_CHECKSUM=0
@@ -363,6 +365,8 @@ flags() {
       echo -e "${RED_REGULAR}  ✗ Cannot write to '${1}', continuing in dry-run${CLEAR}"
       echo "✗ Cannot write to '${1}', continuing in dry-run" >> "$LOG_FILE"
       echo
+      # -d was asked for but cannot be honoured: finish the run as a simulation, then report it as a failure
+      [[ $DEBUG -eq 0 ]] && ForcedDryRun=1
       DEBUG=1
     fi
   else # Um... no ZIM directory path provided? Okay, let's show the usage and exit.
@@ -1212,6 +1216,11 @@ fi
 if [[ $AnyDownloadFailed -eq 1 ]]; then
   echo -e "${RED_BOLD}✗ One or more downloads failed, see $LOG_FILE${CLEAR}"
   echo "✗ One or more downloads failed" >> "$LOG_FILE"
+  exit 1
+fi
+if [[ $ForcedDryRun -eq 1 ]]; then
+  echo -e "${RED_BOLD}✗ -d was given but the ZIM directory is not writable, so nothing was changed${CLEAR}"
+  echo "✗ -d was given but the ZIM directory is not writable, so nothing was changed" >> "$LOG_FILE"
   exit 1
 fi
 if [[ $AnyVerifyFailed -eq 1 ]]; then

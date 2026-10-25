@@ -81,7 +81,7 @@ make lint test
 | Code | Meaning |
 |---|---|
 | 0 | Success, including "nothing to update". |
-| 1 | Runtime error, such as a network or parse failure, a missing dependency, no ZIMs found in the ZIM directory or any failed download (including a size or checksum mismatch). With `-f`, also any ZIM that could not be verified, or that was found corrupt and kept. |
+| 1 | Runtime error, such as a network or parse failure, a missing dependency, no ZIMs found in the ZIM directory or any failed download (including a size or checksum mismatch). With `-f`, also any ZIM that could not be verified, or that was found corrupt and kept. Also `-d` on a ZIM directory that is not writable (the run falls back to dry-run). |
 | 2 | Usage error: a bad option or value, more than one ZIM directory, a missing or invalid ZIM directory, or `-c`/`-f` together with `-t`. |
 | 75 | Another instance is already running on this ZIM directory. |
 
