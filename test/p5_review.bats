@@ -12,10 +12,6 @@ W=wikipedia_en_test_2026-01.zim
 WOLD=wikipedia_en_test_2025-01.zim
 WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 
-keep_copy() {
-  cp "$ZIMS/$1" "$SANDBOX/$1.orig"
-}
-
 @test "R4: -c keeps the old ZIM when the metadata has no sha256 to check the download against" {
   use_fixture_copy
   sed -i '/sha-256/d' "$(remote_file "$WREMOTE.meta4")"
@@ -25,7 +21,7 @@ keep_copy() {
   assert_failure 1
   assert_output --partial "No valid sha256 published for $W"
   refute_output --partial 'Old ZIM purged'
-  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  assert_zim_unchanged "$WOLD"
 }
 
 @test "R4: dry-run -c without a published sha256 only reports it" {
@@ -73,7 +69,7 @@ keep_copy() {
   [[ -s "$ZIMS/$W.part" ]]
   [[ ! -e "$ZIMS/$W" ]]
   [[ ! -e "$ZIMS/.~lock.$W" ]]
-  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  assert_zim_unchanged "$WOLD"
 }
 
 @test "R1: -d -p keeps an old ZIM that carries a stale lock" {
@@ -81,7 +77,7 @@ keep_copy() {
   keep_copy "$WOLD"
   touch "$ZIMS/.~lock.$WOLD"
   run_updater -d -p "$ZIMS"
-  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  assert_zim_unchanged "$WOLD"
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
   assert_output --partial 'Keeping an interrupted download left by an older version of this script'
 }
@@ -137,15 +133,15 @@ keep_copy() {
   make_local_zim "$WOLD"
   make_local_sha256 "$WOLD"
   keep_copy "$WOLD"
-  cp "$ZIMS/$WOLD.sha256" "$SANDBOX/sha256.orig"
+  keep_copy "$WOLD.sha256"
   touch "$ZIMS/.~lock.$WOLD"
   export FAKE_WGET_FAIL="$W"
   run_updater -f -d "$ZIMS"
   assert_success
   assert_output --partial 'Cached Checksum Found'
   assert_output --partial 'Checksum passed'
-  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
-  cmp "$ZIMS/$WOLD.sha256" "$SANDBOX/sha256.orig"
+  assert_zim_unchanged "$WOLD"
+  assert_zim_unchanged "$WOLD.sha256"
   run wget_downloads
   assert_output ''
 }
@@ -153,10 +149,10 @@ keep_copy() {
 @test "R3: -f -d -p never rewrites a locked outdated ZIM's cached checksum with the newer release's hash" {
   make_local_zim "$WOLD"
   make_local_sha256 "$WOLD"
-  cp "$ZIMS/$WOLD.sha256" "$SANDBOX/sha256.orig"
+  keep_copy "$WOLD.sha256"
   touch "$ZIMS/.~lock.$WOLD"
   run_updater -f -d -p "$ZIMS"
-  cmp "$ZIMS/$WOLD.sha256" "$SANDBOX/sha256.orig"
+  assert_zim_unchanged "$WOLD.sha256"
   [[ -f "$ZIMS/$WOLD" ]]
 }
 
@@ -164,13 +160,13 @@ keep_copy() {
   make_local_zim "$WOLD"
   make_local_sha256 "$WOLD"
   head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
-  cp "$ZIMS/$W" "$SANDBOX/partial.orig"
+  keep_copy "$W"
   touch "$ZIMS/.~lock.$W"
   run_updater -f -d "$ZIMS"
   assert_success
   refute_output --partial 'resuming'
   refute_output --partial 'removing corrupt file'
-  cmp "$ZIMS/$W" "$SANDBOX/partial.orig"
+  assert_zim_unchanged "$W"
   [[ -f "$ZIMS/.~lock.$W" ]]
   run wget_downloads
   assert_output ''
@@ -260,7 +256,7 @@ keep_copy() {
   run_updater -d -c "$ZIMS"
   assert_failure 1
   assert_output --partial 'Checksum failed'
-  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  assert_zim_unchanged "$WOLD"
   [[ ! -e "$ZIMS/$W" ]]
 }
 
@@ -270,14 +266,14 @@ keep_copy() {
   run_updater -f "$ZIMS"
   printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
   keep_copy "$W"
-  cp "$ZIMS/$W.sha256" "$SANDBOX/sha256.orig"
+  keep_copy "$W.sha256"
   : >"$FAKE_WGET_LOG"
   export FAKE_WGET_META_FAIL=1 FAKE_WGET_CATALOG_FAIL=1
   run_updater -f -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'Checksum failed against the cached checksum. File kept'
-  cmp "$ZIMS/$W" "$SANDBOX/$W.orig"
-  cmp "$ZIMS/$W.sha256" "$SANDBOX/sha256.orig"
+  assert_zim_unchanged "$W"
+  assert_zim_unchanged "$W.sha256"
   [[ ! -e "$ZIMS/.~lock.$W" ]]
   run wget_downloads
   assert_output ''
@@ -291,7 +287,7 @@ keep_copy() {
   export FAKE_WGET_META_FAIL=1
   run_updater -f -d "$ZIMS"
   assert_failure 1
-  cmp "$ZIMS/$W" "$SANDBOX/$W.orig"
+  assert_zim_unchanged "$W"
   run wget_downloads
   assert_output ''
 }

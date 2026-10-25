@@ -19,11 +19,6 @@ OLD_WT=wiktionary_fr_test_2026-02.zim
 NEW_WT=wiktionary_fr_test_2026-02a.zim
 WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 
-# Keep a pristine copy of a local ZIM to compare against after the run.
-keep_copy() {
-  cp "$ZIMS/$1" "$SANDBOX/$1.orig"
-}
-
 ###############################################################################
 # F: data safety
 
@@ -32,7 +27,7 @@ keep_copy() {
   keep_copy "$OLD_WP"
   export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
   run_updater -d "$ZIMS"
-  cmp "$ZIMS/$OLD_WP" "$SANDBOX/$OLD_WP.orig"
+  assert_zim_unchanged "$OLD_WP"
   run download_log
   assert_line ' !!! DOWNLOAD FAILED !!!'
 }
@@ -42,7 +37,7 @@ keep_copy() {
   keep_copy "$OLD_WP"
   export FAKE_WGET_SHORT=wikipedia_en_test_2026-01
   run_updater -d "$ZIMS"
-  cmp "$ZIMS/$OLD_WP" "$SANDBOX/$OLD_WP.orig"
+  assert_zim_unchanged "$OLD_WP"
 }
 
 @test "F1: with no meta4 and a short download, the old ZIM is kept" {
@@ -50,7 +45,7 @@ keep_copy() {
   keep_copy "$OLD_WP"
   export FAKE_WGET_META_FAIL=1 FAKE_WGET_SHORT=wikipedia_en_test_2026-01
   run_updater -d "$ZIMS"
-  cmp "$ZIMS/$OLD_WP" "$SANDBOX/$OLD_WP.orig"
+  assert_zim_unchanged "$OLD_WP"
 }
 
 @test "F2: a failure on the first ZIM does not mark the second one failed" {
@@ -93,10 +88,10 @@ keep_copy() {
 @test "F4: -f -d with a failed meta4 fetch keeps a good cached .sha256" {
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   make_local_sha256 "$NEW_WP"
-  cp "$ZIMS/$NEW_WP.sha256" "$SANDBOX/sha256.orig"
+  keep_copy "$NEW_WP.sha256"
   export FAKE_WGET_META_FAIL=1
   run_updater -f -d "$ZIMS"
-  cmp "$ZIMS/$NEW_WP.sha256" "$SANDBOX/sha256.orig"
+  assert_zim_unchanged "$NEW_WP.sha256"
 }
 
 @test "F5: a file named like the new ZIM in the CWD does not suppress the download" {
@@ -328,9 +323,9 @@ EOF
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   make_local_zim zzz_orphan_test_2025-01.zim "$(head -c 2048 < <(yes 'orphan payload'))"
   make_local_sha256 zzz_orphan_test_2025-01.zim
-  keep_copy zzz_orphan_test_2025-01.zim
+  keep_copy "zzz_orphan_test_2025-01.zim"
   run_updater -f -d "$ZIMS"
-  cmp "$ZIMS/zzz_orphan_test_2025-01.zim" "$SANDBOX/zzz_orphan_test_2025-01.zim.orig"
+  assert_zim_unchanged "zzz_orphan_test_2025-01.zim"
   assert_output --partial 'Checksum passed'
   run wget_downloads
   assert_output ''
@@ -340,12 +335,12 @@ EOF
   make_local_zim orphan_test_2025-01.zim 'orphan payload'
   make_local_sha256 orphan_test_2025-01.zim
   printf 'tampered' >"$ZIMS/orphan_test_2025-01.zim"
-  keep_copy orphan_test_2025-01.zim
-  cp "$ZIMS/orphan_test_2025-01.zim.sha256" "$SANDBOX/sha256.orig"
+  keep_copy "orphan_test_2025-01.zim"
+  keep_copy "orphan_test_2025-01.zim.sha256"
   run_updater -f -d "$ZIMS"
   assert_output --partial 'no online version to replace it with'
-  cmp "$ZIMS/orphan_test_2025-01.zim" "$SANDBOX/orphan_test_2025-01.zim.orig"
-  cmp "$ZIMS/orphan_test_2025-01.zim.sha256" "$SANDBOX/sha256.orig"
+  assert_zim_unchanged "orphan_test_2025-01.zim"
+  assert_zim_unchanged "orphan_test_2025-01.zim.sha256"
   run wget_downloads
   assert_output ''
 }
@@ -386,7 +381,7 @@ EOF
   # The older release's checksum is still published next to the new one.
   (cd "$ZIMS" && sha256sum "$OLD_WP") >"$(remote_file "zim/wikipedia/$OLD_WP.sha256")"
   run_updater -f -d "$ZIMS"
-  cmp "$ZIMS/$OLD_WP" "$SANDBOX/$OLD_WP.orig"
+  assert_zim_unchanged "$OLD_WP"
   refute_output --partial 'removing corrupt file'
 }
 
@@ -418,7 +413,7 @@ EOF
   keep_copy "$OLD_WP"
   run_updater -f -d "$ZIMS"
   assert_output --partial 'a normal update run (without -f) will replace it'
-  cmp "$ZIMS/$OLD_WP" "$SANDBOX/$OLD_WP.orig"
+  assert_zim_unchanged "$OLD_WP"
   run wget_downloads
   assert_output ''
 }

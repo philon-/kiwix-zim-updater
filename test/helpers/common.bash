@@ -118,3 +118,13 @@ wget_downloads() {
 download_log() {
   cat "$RUN_DIR/download.log" 2>/dev/null || true
 }
+
+# keep_copy <name> - keep a pristine copy of a file in the ZIM directory, for assert_zim_unchanged after the run.
+keep_copy() {
+  cp "$ZIMS/$1" "$SANDBOX/$1.orig"
+}
+
+# assert_zim_unchanged <name> - the file in the ZIM directory still matches the copy keep_copy made of it.
+assert_zim_unchanged() {
+  cmp "$ZIMS/$1" "$SANDBOX/$1.orig" || fail "$ZIMS/$1 is missing or changed"
+}

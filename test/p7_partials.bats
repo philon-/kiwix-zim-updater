@@ -12,10 +12,6 @@ W=wikipedia_en_test_2026-01.zim
 WOLD=wikipedia_en_test_2025-01.zim
 WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 
-keep_copy() {
-  cp "$ZIMS/$1" "$SANDBOX/$1.orig"
-}
-
 @test "part: a successful update leaves no .part file and purges the old ZIM" {
   make_local_zim "$WOLD"
   run_updater -d -c "$ZIMS"
@@ -107,7 +103,7 @@ keep_copy() {
   run_updater -f -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'Checksum failed, downloading a replacement'
-  cmp "$ZIMS/$W" "$SANDBOX/$W.orig"
+  assert_zim_unchanged "$W"
   [[ -s "$ZIMS/$W.part" ]]
 }
 
@@ -199,12 +195,12 @@ keep_copy() {
   FAKE_WGET_FAIL="$W" run_updater -f -d "$ZIMS"
   assert_failure 1
   [[ -s "$ZIMS/$W.part" ]]
-  cp "$ZIMS/$W.part" "$SANDBOX/part.orig"
+  keep_copy "$W.part"
   # The nightly run with --clean-partials must leave it for the next -f run
   run_updater -d --clean-partials "$ZIMS"
   assert_success
   assert_output --partial "Keeping unfinished download for a later run to resume: $ZIMS/$W.part"
-  cmp "$ZIMS/$W.part" "$SANDBOX/part.orig"
+  assert_zim_unchanged "$W.part"
   run_updater -f -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
@@ -227,7 +223,7 @@ keep_copy() {
   run_updater -d -p --clean-partials "$ZIMS"
   assert_success
   assert_output --partial 'Keeping an interrupted download left by an older version of this script'
-  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  assert_zim_unchanged "$WOLD"
   [[ -f "$ZIMS/.~lock.$WOLD" ]]
 }
 
@@ -263,23 +259,23 @@ keep_copy() {
 
 @test "part: a lone old-style locked file is never written to, even when the replacement fails" {
   { cat "$(remote_file "$WREMOTE")"; printf 'garbage'; } >"$ZIMS/$W"
-  cp "$ZIMS/$W" "$SANDBOX/orig"
+  keep_copy "$W"
   touch "$ZIMS/.~lock.$W"
   export FAKE_WGET_FAIL="$W"
   run_updater -d "$ZIMS"
   assert_failure 1
-  cmp "$ZIMS/$W" "$SANDBOX/orig"
+  assert_zim_unchanged "$W"
   [[ -f "$ZIMS/.~lock.$W" ]]
 }
 
 @test "part: a complete lone old-style locked file that fails -c is kept and becomes a normal ZIM" {
   LC_ALL=C tr '\000-\377' '\001-\377\000' <"$(remote_file "$WREMOTE")" >"$ZIMS/$W"
-  cp "$ZIMS/$W" "$SANDBOX/orig"
+  keep_copy "$W"
   touch "$ZIMS/.~lock.$W"
   run_updater -d -c "$ZIMS"
   assert_failure 1
   assert_output --partial 'run with -f to replace it'
-  cmp "$ZIMS/$W" "$SANDBOX/orig"
+  assert_zim_unchanged "$W"
   [[ ! -e "$ZIMS/.~lock.$W" ]]
   # ...and -f then replaces it with a verified download
   run_updater -f -d "$ZIMS"

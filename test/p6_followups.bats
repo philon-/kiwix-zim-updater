@@ -16,12 +16,12 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 
 @test "size limits: a locked partial bigger than -x is neither resumed nor deleted" {
   head -c 1000 "$(remote_file "$BIG_REMOTE")" >"$ZIMS/$BIG"
-  cp "$ZIMS/$BIG" "$SANDBOX/partial.orig"
+  keep_copy "$BIG"
   touch "$ZIMS/.~lock.$BIG"
   run_updater -d -x 2Ki "$ZIMS"
   assert_success
   assert_output --partial 'outside the -n/-x size limits. Left as it is.'
-  cmp "$ZIMS/$BIG" "$SANDBOX/partial.orig"
+  assert_zim_unchanged "$BIG"
   [[ -f "$ZIMS/.~lock.$BIG" ]]
   run wget_downloads
   assert_output ''
@@ -42,12 +42,12 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 
 @test "-f -d -p: a truncated current ZIM is reported and kept, without a download-failed report" {
   head -c 100 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
-  cp "$ZIMS/$W" "$SANDBOX/orig"
+  keep_copy "$W"
   run_updater -f -d -p "$ZIMS"
   assert_failure 1
   assert_output --partial 'File size verification failed but purge skipped'
   refute_output --partial 'One or more downloads failed'
-  cmp "$ZIMS/$W" "$SANDBOX/orig"
+  assert_zim_unchanged "$W"
   run wget_downloads
   assert_output ''
   run download_log

@@ -23,10 +23,6 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   grep -q -- "-O $ZIMS/$W.part" "$FAKE_WGET_LOG"
 }
 
-keep_copy() {
-  cp "$ZIMS/$1" "$SANDBOX/$1.orig"
-}
-
 GiB=1073741824
 
 @test "free space: a download that would leave less than --min-free (default 1Gi) is skipped, old ZIM kept" {
@@ -37,7 +33,7 @@ GiB=1073741824
   assert_failure 1
   assert_output --partial 'Download skipped, not enough free space'
   assert_output --partial 'must stay free (--min-free)'
-  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  assert_zim_unchanged "$WOLD"
   [[ ! -e "$ZIMS/$W" ]]
   [[ ! -e "$ZIMS/$W.part" ]]
   run wget_downloads
@@ -106,7 +102,7 @@ GiB=1073741824
   assert_output --partial 'Download skipped, metadata unavailable'
   run wget_downloads
   assert_output ''
-  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  assert_zim_unchanged "$WOLD"
   [[ ! -e "$ZIMS/$W.part" ]]
 }
 
