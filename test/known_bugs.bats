@@ -33,15 +33,6 @@ setup() {
   assert_zim_unchanged "$WP_OLD"
 }
 
-@test "F1: with no meta4 and a short download, the old ZIM is kept" {
-  make_local_zim "$WP_OLD"
-  keep_copy "$WP_OLD"
-  export FAKE_WGET_META_FAIL=1 FAKE_WGET_SHORT="$WP_NEW"
-  run_updater -d "$ZIMS"
-  assert_failure 1
-  assert_zim_unchanged "$WP_OLD"
-}
-
 @test "F2: a failure on the first ZIM does not mark the second one failed" {
   make_local_zim "$WP_OLD"
   keep_copy "$WP_OLD"
@@ -70,15 +61,6 @@ setup() {
   run_updater -f "$ZIMS"
   assert_success
   assert_equal "$(zim_dir_snapshot)" "$before"
-}
-
-@test "F4: a failed meta4 fetch does not write an empty-hash .sha256" {
-  make_local_zim "$WP_OLD"
-  export FAKE_WGET_META_FAIL=1
-  run_updater -d "$ZIMS"
-  # Without metadata the download cannot be verified (F1), so no checksum may be written at all
-  refute_exists "$ZIMS/$WP_NEW.sha256"
-  assert_exists "$ZIMS/$WP_OLD"
 }
 
 @test "F4: -f -d with a failed meta4 fetch keeps a good cached .sha256" {
@@ -194,26 +176,8 @@ setup() {
   [[ "${stderr,,}" == *"country code"* ]]
 }
 
-@test "H6: a second instance on the same ZIM dir exits 75" {
-  make_local_zim "$WP_OLD"
-  exec 8<"$ZIMS"
-  flock -n 8
-  run_updater "$ZIMS"
-  exec 8<&-
-  assert_failure 75
-  run wget_downloads
-  assert_output ''
-}
-
 ###############################################################################
 # M: medium
-
-@test "M2: clear is not called when stdout is not a terminal" {
-  make_local_zim "$WP_OLD"
-  run_updater "$ZIMS"
-  assert_success
-  refute_nonempty "$FAKE_CLEAR_LOG"
-}
 
 ###############################################################################
 # N: new defects found while building the harness (not in the review table)

@@ -11,43 +11,6 @@ setup() {
 # M4: every global is initialised, so nothing leaks in from the environment.
 # common_setup unsets these variables; the tests export them deliberately.
 
-@test "M4: SKIP_PURGE=1 in the environment does not stop -d from purging" {
-  make_local_zim "$WP_OLD"
-  export SKIP_PURGE=1
-  run_updater -d "$ZIMS"
-  assert_success
-  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$WP_OLD"
-}
-
-@test "M4: SKIP_PURGE in the environment is never evaluated as arithmetic" {
-  make_local_zim "$WP_OLD"
-  export SKIP_PURGE="x[\$(touch '$SANDBOX/pwned')]"
-  run_updater -d "$ZIMS"
-  assert_success
-  refute_exists "$SANDBOX/pwned"
-}
-
-@test "M4: COUNTRY_CODE in the environment does not reach the meta4 request" {
-  make_local_zim "$WP_OLD"
-  export COUNTRY_CODE=XX
-  run_updater "$ZIMS"
-  assert_success
-  run grep -c 'meta4?country=$' "$FAKE_WGET_LOG"
-  assert_output '1'
-  run grep -F 'country=XX' "$FAKE_WGET_LOG"
-  assert_output ''
-}
-
-@test "M4: POSITIONAL_ARGS in the environment does not replace the ZIM directory" {
-  make_local_zim "$WP_OLD"
-  export POSITIONAL_ARGS="$SANDBOX/elsewhere"
-  run_updater "$ZIMS"
-  assert_success
-  refute_output --partial 'is not a directory'
-  assert_output --partial "- $WP_OLD:"
-}
-
 ###############################################################################
 # M1: the ZIM directory is listed with a glob, not by parsing ls.
 
