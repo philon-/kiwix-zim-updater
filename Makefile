@@ -11,9 +11,10 @@ else
 SHELLCHECK ?= shellcheck
 endif
 
-# Files checked at SHELLCHECK_SEVERITY (the script, default: every finding) and at the default
-# severity (everything written for the test harness).
+# Files checked at SHELLCHECK_SEVERITY (the script and the container scripts, default: every finding)
+# and at the default severity (everything written for the test harness).
 SCRIPT := kiwix-zim-updater.sh
+DOCKER_SCRIPTS := docker/docker-entrypoint.sh docker/healthcheck.sh
 HARNESS_SCRIPTS := $(wildcard test/helpers/bin/*) $(wildcard test/fixtures/build.sh)
 HARNESS_LIBS := $(wildcard test/helpers/*.bash)
 
@@ -25,6 +26,6 @@ test:
 	$(BATS) test/
 
 lint:
-	$(SHELLCHECK) --severity=$(SHELLCHECK_SEVERITY) $(SCRIPT)
+	$(SHELLCHECK) --severity=$(SHELLCHECK_SEVERITY) $(SCRIPT) $(DOCKER_SCRIPTS)
 	$(if $(strip $(HARNESS_SCRIPTS)),$(SHELLCHECK) $(HARNESS_SCRIPTS))
 	$(if $(strip $(HARNESS_LIBS)),$(SHELLCHECK) -s bash $(HARNESS_LIBS))
