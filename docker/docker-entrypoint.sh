@@ -53,11 +53,13 @@ read_bool() {
   echo "$result"
 }
 
-# interval_seconds <interval> - Print RUN_INTERVAL in seconds: 0 for "once" or 0, otherwise <n>[smhd]
+# interval_seconds <interval> - Print RUN_INTERVAL in seconds: 0 for "once" or 0, otherwise <n>[smhd]. At most 12
+# digits, so that even <n>d stays far below the 64-bit limit: a wrapped (negative) interval would make sleep fail at
+# once and the loop run the updater back to back.
 interval_seconds() {
   local value="${1,,}" number unit
   [[ "$value" == "once" ]] && { echo 0; return 0; }
-  [[ "$value" =~ ^([0-9]+)([smhd]?)$ ]] || return 1
+  [[ "$value" =~ ^([0-9]{1,12})([smhd]?)$ ]] || return 1
   number=$((10#${BASH_REMATCH[1]}))
   unit="${BASH_REMATCH[2]}"
   case "$unit" in
@@ -190,7 +192,7 @@ main() {
 
   local interval run=0 status
   interval="$(interval_seconds "${RUN_INTERVAL:-24h}")" ||
-    usage_error "RUN_INTERVAL must be once, 0 or <number>[s|m|h|d], got '$RUN_INTERVAL'"
+    usage_error "RUN_INTERVAL must be once, 0 or <number>[s|m|h|d] with at most 12 digits, got '$RUN_INTERVAL'"
   build_args
   if [[ ! -w "$STATE_DIR" ]]; then
     printf '[docker-entrypoint] the state directory %s is not writable by uid %s\n' "$STATE_DIR" "$(id -u)" >&2

@@ -277,6 +277,28 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
   [[ "$(stub_runs)" -eq 0 ]]
 }
 
+@test "entrypoint: an overflowing RUN_INTERVAL is a usage error, not a back-to-back loop" {
+  local value
+  for value in 9223372036854775808s 9223372036854775807d 1000000000000d 0000000000000001s; do
+    # timeout: with the overflow bug the loop would run back to back forever
+    run --separate-stderr timeout 10 env RUN_INTERVAL="$value" "$ENTRYPOINT"
+    assert_failure 2
+    [[ "$stderr" == *"at most 12 digits"* ]]
+  done
+  [[ "$(stub_runs)" -eq 0 ]]
+}
+
+@test "entrypoint: the largest RUN_INTERVAL is accepted and really sleeps" {
+  RUN_INTERVAL=999999999999d "$ENTRYPOINT" >"$SANDBOX/out" 2>&1 3>&- &
+  BG_PID=$!
+  wait_for 15 at_least_runs 1
+  sleep 2
+  [[ "$(stub_runs)" -eq 1 ]]
+  kill -TERM "$BG_PID"
+  wait "$BG_PID" || true
+  BG_PID=""
+}
+
 @test "entrypoint: the loop keeps running after a failed run" {
   STUB_EXIT=1 RUN_INTERVAL=1s "$ENTRYPOINT" >"$SANDBOX/out" 2>&1 3>&- &
   BG_PID=$!
