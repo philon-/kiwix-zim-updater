@@ -17,7 +17,7 @@ TEST_NAME=library-test
 # shellcheck source=test/helpers/container.bash
 source "$(dirname "${BASH_SOURCE[0]}")/helpers/container.bash"
 
-SERVE_IMAGE="${SERVE_IMAGE:-ghcr.io/kiwix/kiwix-serve:latest}"
+SERVE_IMAGE="${SERVE_IMAGE:-ghcr.io/kiwix/kiwix-serve:3.8.2}"
 BUILDER_IMAGE="docker.io/library/debian:trixie-slim"
 SERVE_NAME="kiwix-zim-updater-library-test-$$"
 cleanup_containers+=("$SERVE_NAME")
