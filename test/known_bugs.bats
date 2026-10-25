@@ -377,7 +377,6 @@ EOF
 }
 
 @test "N5: -f checks an outdated ZIM against its own online checksum, not the new release's" {
-  skip "N5: state 1 for an outdated ZIM uses the newer release's size/hash and rm's the intact file"
   use_fixture_copy
   make_local_zim "$OLD_WP"
   keep_copy "$OLD_WP"
@@ -406,4 +405,27 @@ EOF
   grep -qF '.meta4' "$FAKE_WGET_LOG"
   run grep -e --no-metalink "$FAKE_WGET_LOG"
   assert_output ''
+}
+
+@test "N5: -f reports a corrupt outdated ZIM against its own online checksum and keeps it" {
+  use_fixture_copy
+  make_local_zim "$OLD_WP"
+  (cd "$ZIMS" && sha256sum "$OLD_WP") >"$(remote_file "zim/wikipedia/$OLD_WP.sha256")"
+  printf 'tampered' >>"$ZIMS/$OLD_WP"
+  keep_copy "$OLD_WP"
+  run_updater -f -d "$ZIMS"
+  assert_output --partial 'a normal update run (without -f) will replace it'
+  cmp "$ZIMS/$OLD_WP" "$SANDBOX/$OLD_WP.orig"
+  run wget_downloads
+  assert_output ''
+}
+
+@test "N5: -f -d stores the outdated ZIM's own online checksum for offline use" {
+  use_fixture_copy
+  make_local_zim "$OLD_WP"
+  (cd "$ZIMS" && sha256sum "$OLD_WP") >"$(remote_file "zim/wikipedia/$OLD_WP.sha256")"
+  run_updater -f -d "$ZIMS"
+  assert_output --partial 'Checksum passed'
+  run cat "$ZIMS/$OLD_WP.sha256"
+  assert_output "$(cut -d' ' -f1 "$(remote_file "zim/wikipedia/$OLD_WP.sha256")") $OLD_WP"
 }
