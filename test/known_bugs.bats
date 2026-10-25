@@ -265,7 +265,6 @@ EOF
 }
 
 @test "H6: a second instance on the same ZIM dir exits 75" {
-  skip "H6: nothing prevents two runs from overlapping"
   make_local_zim "$OLD_WP"
   exec 8<"$ZIMS"
   flock -n 8

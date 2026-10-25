@@ -380,6 +380,7 @@ flags() {
   fi
   echo
 
+  acquire_zim_dir_lock
   echo -e "${BLUE_BOLD}  -Building online ZIM list...${CLEAR}"
 
   # Build online ZIM list.
@@ -440,6 +441,22 @@ check_dependencies() {
     echo -e "${RED_BOLD}✗ Missing required tool(s): ${missing[*]}. Please install them and try again. Exiting...${CLEAR}" >&2
     echo "✗ Missing required tool(s): ${missing[*]}. Exiting..." >> "$LOG_FILE"
     exit 1
+  fi
+}
+
+# acquire_zim_dir_lock - Refuse to run while another instance works on the same ZIM directory. The lock is taken on
+# the directory itself (opened read-only on fd 9), so no lock file is created and read-only directories work too.
+# It is held until the script exits.
+acquire_zim_dir_lock() {
+  if ! exec 9<"$ZIMPath"; then
+    echo -e "${RED_BOLD}  ✗ Cannot open '$ZIMPath' to lock it. Exiting...${CLEAR}" >&2
+    echo "✗ Cannot open '$ZIMPath' to lock it. Exiting..." >> "$LOG_FILE"
+    exit 1
+  fi
+  if ! flock -n 9; then
+    echo -e "${RED_BOLD}  ✗ Another instance is already running on '$ZIMPath'. Exiting...${CLEAR}" >&2
+    echo "✗ Another instance is already running on '$ZIMPath'. Exiting..." >> "$LOG_FILE"
+    exit 75
   fi
 }
 
