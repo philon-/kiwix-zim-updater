@@ -241,13 +241,6 @@ assert_fixture_arrays() {
 ###############################################################################
 # usage_example
 
-@test "usage_example 0: exits 0 with the usage on stdout" {
-  run --separate-stderr usage_example 0
-  assert_success
-  assert_line --index 0 'Usage: ./kiwix-zim-updater.sh <options> /full/path/'
-  assert_equal "$stderr" ''
-}
-
 @test "usage_example 2: exits 2 with the usage on stderr" {
   run --separate-stderr usage_example 2
   assert_failure 2

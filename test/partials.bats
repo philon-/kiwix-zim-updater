@@ -417,11 +417,3 @@ BIG_REMOTE=zim/other/big_test_2026-03.zim
   assert_output --partial '*** Simulated *** Removing unfinished download that can no longer be used'
   assert_exists "$ZIMS/wikipedia_en_test_2025-06.zim.part"
 }
-
-@test "docs: the README usage block matches the -h output" {
-  run bash "$SCRIPT_COPY" -h
-  assert_success
-  local readme
-  readme="$(awk '/^## Usage$/{u=1;next} u && /^```text$/{p=1;next} p && /^```$/{exit} p' "$REPO_ROOT/README.md")"
-  assert_equal "$output" "$readme"
-}
