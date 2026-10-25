@@ -196,7 +196,6 @@ EOF
 }
 
 @test "H3: self-update never moves download.log or kiwix-index into the script dir" {
-  skip "H3: self_update cds into the script dir and never cds back"
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=other-branch
   make_local_zim "$OLD_WP"
@@ -209,6 +208,19 @@ EOF
   [[ ! -e "$SANDBOX/bin/kiwix-index" ]]
   run download_log
   assert_line '3. Processing ZIM(s)...'
+}
+
+@test "H3: an up-to-date self-update check keeps download.log and kiwix-index in the run dir" {
+  mkdir "$SANDBOX/bin/.git"
+  export FAKE_GIT_MODE=current
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  assert_success
+  assert_output --partial 'Version: Current'
+  [[ -f "$RUN_DIR/download.log" ]]
+  [[ -f "$RUN_DIR/kiwix-index" ]]
+  [[ ! -e "$SANDBOX/bin/download.log" ]]
+  [[ ! -e "$SANDBOX/bin/kiwix-index" ]]
 }
 
 @test "H4: a failed catalog fetch exits 1 and caches no kiwix-index" {
