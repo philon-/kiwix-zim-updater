@@ -70,11 +70,11 @@ OLD_WP=wikipedia_en_test_2025-12.zim
 
 # Set up $SANDBOX/origin.git (bare) and $SANDBOX/clone, a clone of it on main
 # whose only commit holds the script and a NOTES file. Git in the run is the
-# real one behind a wrapper that logs every call to $FAKE_GIT_LOG. The user's
-# global and system git config are kept out of everything.
+# real one behind a wrapper that logs every call to $FAKE_GIT_LOG. Git is kept
+# inside the sandbox (AGENTS.md, hard rule 1), see isolate_git.
 setup_clone() {
   REAL_GIT="$(PATH="${PATH#"$STUB_BIN:"}" command -v git)" || skip "git is not installed"
-  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+  isolate_git
   mkdir "$SANDBOX/realgit"
   cat >"$SANDBOX/realgit/git" <<WRAPPER
 #!$(command -v bash)
@@ -92,6 +92,28 @@ WRAPPER
   sgit -C "$SANDBOX/clone" commit -q -m 'v1'
   sgit -C "$SANDBOX/clone" push -q origin main
   CLONE_SCRIPT="$SANDBOX/clone/kiwix-zim-updater.sh"
+}
+
+# isolate_git - Keep every git call of the test, and of the script under test, inside the sandbox:
+# - drop inherited repository selectors and injected config (GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_PARAMETERS, ...;
+#   the list git itself considers repository-local, plus GIT_CONFIG_KEY_n/VALUE_n), which could otherwise redirect
+#   `add`, `commit` or `push` to a real repository despite `-C`;
+# - give git a home, an XDG config directory and an empty global config inside the sandbox, so neither the user's
+#   config nor their ignore and attributes files apply, and no system config;
+# - stop repository discovery at the sandbox.
+isolate_git() {
+  local var
+  while read -r var; do
+    unset "$var"
+  done < <("$REAL_GIT" rev-parse --local-env-vars)
+  for var in "${!GIT_CONFIG_KEY_@}" "${!GIT_CONFIG_VALUE_@}"; do
+    unset "$var"
+  done
+  unset GIT_CONFIG_COUNT GIT_TEMPLATE_DIR GIT_SSH_COMMAND GIT_ASKPASS
+  mkdir -p "$SANDBOX/home/.config"
+  : >"$SANDBOX/home/.gitconfig"
+  export HOME="$SANDBOX/home" XDG_CONFIG_HOME="$SANDBOX/home/.config" GIT_CONFIG_GLOBAL="$SANDBOX/home/.gitconfig" \
+    GIT_CONFIG_NOSYSTEM=1 GIT_CEILING_DIRECTORIES="$SANDBOX"
 }
 
 # git for the test's own setup: real git, with an identity and no signing for
@@ -246,4 +268,26 @@ head_of() {
   assert_success
   assert_output --partial 'Running the updated version'
   assert_output --partial 'v9.9-test'
+}
+
+@test "isolation: inherited git variables and user files cannot leak into the sandbox repositories" {
+  local real_git
+  real_git="$(PATH="${PATH#"$STUB_BIN:"}" command -v git)" || skip "git is not installed"
+  # A decoy repository and user-level git files, as an unlucky caller's environment could point at them
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 "$real_git" init -q --bare "$SANDBOX/decoy.git"
+  mkdir -p "$SANDBOX/decoy-wt" "$SANDBOX/outer-xdg/git"
+  echo '*' >"$SANDBOX/outer-xdg/git/ignore"
+  export GIT_DIR="$SANDBOX/decoy.git" GIT_WORK_TREE="$SANDBOX/decoy-wt" XDG_CONFIG_HOME="$SANDBOX/outer-xdg"
+  export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile GIT_CONFIG_VALUE_0="$SANDBOX/outer-xdg/git/ignore"
+  setup_clone
+  push_update
+  # An untracked file must still be seen (the leaked ignore-everything rules would hide it) ...
+  echo 'scratch' >"$SANDBOX/clone/untracked.txt"
+  make_local_zim "$OLD_WP"
+  run_clone -U "$ZIMS"
+  assert_output --partial 'local changes'
+  # ... and nothing reached the decoy repository
+  run env -i PATH="$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null "$real_git" --git-dir="$SANDBOX/decoy.git" for-each-ref
+  assert_output ''
+  [[ -z "$(find "$SANDBOX/decoy.git/objects" -type f)" ]]
 }
