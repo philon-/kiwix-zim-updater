@@ -880,23 +880,14 @@ parse_args() {
   [[ ${#POSITIONAL_ARGS[@]} -gt 1 ]] && usage_error "Only one ZIM directory can be given, got ${#POSITIONAL_ARGS[@]}: ${POSITIONAL_ARGS[*]}"
 }
 
-# print_banner - Show the name, version and whether this is a dry-run
+# print_banner - Name the script and its version, and say whether this run may change anything (also in the log)
 print_banner() {
-  echo "=========================================="
-  echo " kiwix-zim-updater"
-  echo "       download.kiwix.org ZIM Updater"
-  echo
-  echo "   v$VER by DocDrydenn and jojo2357"
-  echo "=========================================="
-  echo
-  echo "            DRY-RUN/SIMULATION"
+  say "${BLUE_BOLD}" "kiwix-zim-updater $VER"
   if [[ $DEBUG -eq 1 ]]; then
-    printf '%s\n' "               - ENABLED -" "" "           Use '-d' to disable."
+    say "${YELLOW_BOLD}" "Dry run: nothing will be changed (use -d to apply)"
   else
-    printf '%s\n' "               - DISABLED -" "" "             !!! Caution !!!"
+    say "${RED_BOLD}" "Live run (-d): changes will be written to the ZIM directory"
   fi
-  echo
-  echo "=========================================="
   echo
 }
 

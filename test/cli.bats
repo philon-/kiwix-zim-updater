@@ -40,17 +40,16 @@ setup() {
   make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater "$ZIMS"
   assert_success
-  assert_output --partial 'DRY-RUN/SIMULATION'
-  assert_output --partial '- ENABLED -'
-  refute_output --partial '- DISABLED -'
+  assert_output --partial 'Dry run: nothing will be changed (use -d to apply)'
+  refute_output --partial 'Live run'
 }
 
-@test "-d disables the dry-run banner" {
+@test "-d says the run is live" {
   make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -d "$ZIMS"
   assert_success
-  assert_output --partial '- DISABLED -'
-  assert_output --partial '!!! Caution !!!'
+  assert_output --partial 'Live run (-d): changes will be written to the ZIM directory'
+  refute_output --partial 'Dry run'
 }
 
 @test "nothing to update exits 0" {

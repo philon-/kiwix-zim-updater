@@ -165,7 +165,7 @@ head_of() {
   assert_success
   assert_output --partial 'Version: Mismatched'
   assert_output --partial 'Running the updated version'
-  assert_output --partial 'v9.9-test'
+  assert_output --partial 'kiwix-zim-updater 9.9-test'
   assert_equal "$(grep -c 'Update Complete' <<<"$output")" 1
   assert_equal "$(grep -c '3. Processing ZIM(s)...' <<<"$output")" 1
   assert_equal "$(head_of "$SANDBOX/clone")" "$(head_of "$SANDBOX/origin.git" main)"
@@ -200,7 +200,7 @@ head_of() {
   assert_success
   assert_output --partial 'has local changes: Not updating'
   refute_output --partial 'Update Complete'
-  refute_output --partial 'v9.9-test'
+  refute_output --partial 'kiwix-zim-updater 9.9-test'
   assert_output --partial '3. Processing ZIM(s)...'
   assert_equal "$(head_of "$SANDBOX/clone")" "$before"
   run tail -n 1 "$SANDBOX/clone/NOTES"
@@ -283,7 +283,7 @@ head_of() {
   PATH="$SANDBOX/realgit:$PATH" run bash kiwix-zim-updater.sh -U "$ZIMS"
   assert_success
   assert_output --partial 'Running the updated version'
-  assert_output --partial 'v9.9-test'
+  assert_output --partial 'kiwix-zim-updater 9.9-test'
 }
 
 @test "isolation: inherited git variables and user files cannot leak into the sandbox repositories" {
