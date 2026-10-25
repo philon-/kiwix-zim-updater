@@ -197,6 +197,8 @@ keep_copy() {
   keep_copy "$WOLD"
   touch "$ZIMS/.~lock.$WOLD"
   run_updater -d -p --clean-partials "$ZIMS"
+  assert_success
+  assert_output --partial 'Keeping an interrupted download left by an older version of this script'
   cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
   [[ -f "$ZIMS/.~lock.$WOLD" ]]
 }
