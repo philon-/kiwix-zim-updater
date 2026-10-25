@@ -13,39 +13,26 @@
 
 set -u
 
-ENGINE="${CONTAINER_ENGINE:-}"
-IMAGE="${IMAGE:-localhost/kiwix-zim-updater:test}"
+TEST_NAME=library-test
+# shellcheck source=test/helpers/container.bash
+source "$(dirname "${BASH_SOURCE[0]}")/helpers/container.bash"
+
 SERVE_IMAGE="${SERVE_IMAGE:-ghcr.io/kiwix/kiwix-serve:latest}"
 BUILDER_IMAGE="docker.io/library/debian:trixie-slim"
-if [[ -z "$ENGINE" ]]; then
-  ENGINE="$(command -v podman || command -v docker)" || { echo "library-test: neither podman nor docker found" >&2; exit 1; }
-fi
-user_opts=(--user "$(id -u):$(id -g)")
-[[ "$(basename "$ENGINE")" == podman* ]] && user_opts+=(--userns=keep-id)
-
-failures=0
-pass() { echo "ok   $*"; }
-fail() {
-  echo "FAIL $*"
-  failures=$((failures + 1))
-}
-
-TMP="$(mktemp -d)"
 SERVE_NAME="kiwix-zim-updater-library-test-$$"
-cleanup() {
-  "$ENGINE" rm -f "$SERVE_NAME" >/dev/null 2>&1
-  rm -rf "$TMP"
+cleanup_containers+=("$SERVE_NAME")
+
+# on_failure - called by summary: show what kiwix-serve said, if it was started
+on_failure() {
+  "$ENGINE" container inspect "$SERVE_NAME" >/dev/null 2>&1 || return 0
+  echo "== kiwix-serve logs"
+  "$ENGINE" logs "$SERVE_NAME" 2>&1 | tail -20
 }
-trap cleanup EXIT
+
 mkdir -p "$TMP/data" "$TMP/in"
 # A 48x48 PNG, which zimwriterfs requires as the illustration
 echo 'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAAQklEQVR4nO3OQQ0AIAwAsUlBGtKQiguOR5MK6Kx9vjL5QEhISKgeCAkJCdUDISEhoXogJCQkVA+EhISE6oGQkNBjF6vqIJcYXULUAAAAAElFTkSuQmCC' |
   base64 -d >"$TMP/in/icon.png"
-
-if ! "$ENGINE" image inspect "$IMAGE" >/dev/null 2>&1; then
-  echo "library-test: no image $IMAGE; build it with make docker-build" >&2
-  exit 1
-fi
 
 # make_zims <name> [<name>...] - real ZIMs titled "Title <name>" in $TMP/data
 make_zims() {
@@ -91,7 +78,7 @@ wait_for() {
 }
 
 echo "== Real ZIMs and a first library"
-make_zims title_x_2026-01 || { fail "could not build ZIMs with zimwriterfs"; exit 1; }
+make_zims title_x_2026-01 || abort "could not build ZIMs with zimwriterfs"
 if rebuild && grep -q 'path="title_x_2026-01.zim"' "$TMP/data/library.xml"; then
   pass "rebuild_library wrote library.xml with a relative path"
 else
@@ -100,7 +87,7 @@ fi
 
 echo "== kiwix-serve from $SERVE_IMAGE, ZIM directory read-only"
 "$ENGINE" run -d --name "$SERVE_NAME" -p 127.0.0.1::8080 -v "$TMP/data:/data:ro,z" "$SERVE_IMAGE" \
-  --library --monitorLibrary /data/library.xml >/dev/null || { fail "kiwix-serve did not start"; exit 1; }
+  --library --monitorLibrary /data/library.xml >/dev/null || abort "kiwix-serve did not start"
 PORT="$("$ENGINE" port "$SERVE_NAME" 8080 | head -n 1 | sed 's/.*://')"
 if wait_for "Title title_x_2026-01 "; then pass "serves the first ZIM"; else fail "first ZIM not served: $(titles)"; fi
 inode="$(stat -c %i "$TMP/data/library.xml")"
@@ -129,11 +116,4 @@ else
   fail "kiwix-serve stopped"
 fi
 
-echo
-if [[ $failures -eq 0 ]]; then
-  echo "library-test: all checks passed"
-else
-  echo "library-test: $failures check(s) failed"
-  "$ENGINE" logs "$SERVE_NAME" 2>&1 | tail -20
-  exit 1
-fi
+summary

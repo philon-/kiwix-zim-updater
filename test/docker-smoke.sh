@@ -8,43 +8,18 @@
 
 set -u
 
+TEST_NAME=docker-test
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENGINE="${CONTAINER_ENGINE:-}"
-IMAGE="${IMAGE:-localhost/kiwix-zim-updater:test}"
+# shellcheck source=test/helpers/container.bash
+source "$(dirname "${BASH_SOURCE[0]}")/helpers/container.bash"
+
 STUB_PATH="/stubs:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-if [[ -z "$ENGINE" ]]; then
-  ENGINE="$(command -v podman || command -v docker)" || { echo "docker-test: neither podman nor docker found" >&2; exit 1; }
-fi
-
 run_opts=(--rm)
-# No container gets a network: the stubs serve everything, and nothing can reach kiwix.org by mistake
-container_opts=(--network none)
-if [[ "$(basename "$ENGINE")" == podman* ]]; then
-  # keep-id maps the calling user into the container unchanged
-  container_opts+=(--userns=keep-id)
-fi
-# Run as the calling user, so the temporary directories below are writable and removable afterwards
-container_opts+=(--user "$(id -u):$(id -g)")
+# No container gets a network: the stubs serve everything, and nothing can reach kiwix.org by mistake. They run as the
+# calling user, so the temporary directories below are writable and removable afterwards.
+container_opts=(--network none "${user_opts[@]}")
 
-failures=0
-pass() { echo "ok   $*"; }
-fail() {
-  echo "FAIL $*"
-  failures=$((failures + 1))
-}
-
-TMP="$(mktemp -d)"
-cleanup() {
-  [[ -n "${CONTAINER_ID:-}" ]] && "$ENGINE" rm -f "$CONTAINER_ID" >/dev/null 2>&1
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
-if ! size="$("$ENGINE" image inspect --format '{{.Size}}' "$IMAGE" 2>/dev/null)"; then
-  echo "docker-test: no image $IMAGE; build it with make docker-build" >&2
-  exit 1
-fi
+size="$("$ENGINE" image inspect --format '{{.Size}}' "$IMAGE")"
 echo "== Image size: $(numfmt --to=iec "$size") ($size bytes)"
 
 # Private copies of the stubs and fixtures: relabelling them for SELinux (:z) must not touch the repository
@@ -61,6 +36,10 @@ offline=(
   -e "PATH=$STUB_PATH" -e FAKE_FIXTURES=/fixtures
 )
 snapshot() { (cd "$TMP/zims" && find . -mindepth 1 -printf '%P %s %T@\n' | LC_ALL=C sort); }
+# healthcheck - run the image's health check against $TMP/state
+healthcheck() {
+  "$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" -v "$TMP/state:/state:z" --entrypoint healthcheck.sh "$IMAGE"
+}
 
 echo "== -h"
 out="$("$ENGINE" run "${run_opts[@]}" --network none "$IMAGE" -h 2>&1)"
@@ -78,7 +57,7 @@ out="$("$ENGINE" run "${run_opts[@]}" --network none --entrypoint id "$IMAGE" -u
 if [[ "$out" == "1000" ]]; then pass "runs as uid 1000"; else fail "default uid is '$out'"; fi
 
 echo "== Healthcheck before any run"
-if "$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" -v "$TMP/state:/state:z" --entrypoint healthcheck.sh "$IMAGE"; then
+if healthcheck; then
   pass "healthy without a finished run"
 else
   fail "unhealthy without a finished run"
@@ -128,13 +107,13 @@ else
 fi
 
 echo "== Healthcheck after the run"
-if "$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" -v "$TMP/state:/state:z" --entrypoint healthcheck.sh "$IMAGE"; then
+if healthcheck; then
   pass "healthy after exit 0"
 else
   fail "unhealthy after exit 0"
 fi
 printf 'exit=1 time=2026-01-01T00:00:00Z\n' >"$TMP/state/last-run"
-if "$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" -v "$TMP/state:/state:z" --entrypoint healthcheck.sh "$IMAGE"; then
+if healthcheck; then
   fail "healthy after exit 1"
 else
   pass "unhealthy after exit 1"
@@ -148,7 +127,7 @@ out="$("$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" "${offline[@]}" -e 
 status=$?
 if [[ $status -eq 1 ]]; then pass "a run without the catalog exits 1"; else fail "outage run exit $status"; echo "$out"; fi
 if [[ "$(snapshot)" == "$before" ]]; then pass "ZIM directory unchanged"; else fail "ZIM directory changed"; snapshot; fi
-if "$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" -v "$TMP/state:/state:z" --entrypoint healthcheck.sh "$IMAGE"; then
+if healthcheck; then
   fail "healthy after the outage"
 else
   pass "unhealthy after the outage"
@@ -161,10 +140,12 @@ if [[ "$hc" == *healthcheck.sh* ]]; then pass "HEALTHCHECK: $hc"; else fail "no 
 
 echo "== Clean stop of the scheduled loop"
 CONTAINER_ID="$("$ENGINE" run -d "${container_opts[@]}" "${offline[@]}" -e RUN_INTERVAL=1h "$IMAGE")"
+cleanup_containers+=("$CONTAINER_ID")
 for _ in $(seq 1 60); do
   [[ -e "$TMP/state/last-run" ]] && break
   sleep 0.5
 done
+[[ -e "$TMP/state/last-run" ]] || fail "the first scheduled run did not finish within 30 s"
 start=$SECONDS
 "$ENGINE" stop -t 30 "$CONTAINER_ID" >/dev/null
 code="$("$ENGINE" inspect --format '{{.State.ExitCode}}' "$CONTAINER_ID")"
@@ -176,9 +157,4 @@ else
 fi
 if [[ "$(snapshot)" == "$before" ]]; then pass "ZIM directory still unchanged"; else fail "ZIM directory changed"; fi
 
-echo
-if [[ $failures -gt 0 ]]; then
-  echo "docker-test: $failures check(s) failed"
-  exit 1
-fi
-echo "docker-test: all checks passed"
+summary
