@@ -768,11 +768,6 @@ main() {
     fi
 
     echo -e "${BLUE_BOLD}  - $FileName:${CLEAR}"
-    # A locked ZIM is an interrupted download to finish. With -f only the current catalog version can be finished; an
-    # outdated one is verified against its own checksum like any other outdated ZIM below.
-    [[ -f "$ZIMPath.~lock.$FileName" ]] && { [[ $VERIFY_LIBRARY -eq 0 ]] || [[ "${RemoteFiles[$RemoteIndex]}" == "$FileName" ]]; } && echo -e "${YELLOW_REGULAR}    Incomplete download detected\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalRequiresDownloadArray+=(1) && AnyDownloads=1 && continue
-
-
     MatchingSize=${FileSizes[$RemoteIndex]}
     MatchingFileName=${RemoteFiles[$RemoteIndex]}
     MatchingCategory=${RemoteCategory[$RemoteIndex]}
@@ -788,6 +783,22 @@ main() {
     [[ $MAX_SIZE -gt 0 ]] && [[ $MatchingSize -gt $MAX_SIZE ]] && FileTooLarge=1
     FileSizeAcceptable=0
     [ $FileTooSmall -eq 0 ] && [ $FileTooLarge -eq 0 ] && FileSizeAcceptable=1
+
+    # A locked ZIM is an interrupted download to finish. With -f only the current catalog version can be finished; an
+    # outdated one is verified against its own checksum like any other outdated ZIM below. The -n/-x limits apply to
+    # finishing it too: outside them it is left alone (and kept) for a run that allows its size.
+    if [[ -f "$ZIMPath.~lock.$FileName" ]] && { [[ $VERIFY_LIBRARY -eq 0 ]] || [[ "$MatchingFileName" == "$FileName" ]]; }; then
+      if [[ $FileSizeAcceptable -eq 0 ]]; then
+        LocalRequiresDownloadArray+=(0)
+        echo -e "${YELLOW_REGULAR}    Incomplete download detected, but $(numfmt --to=iec-i "$MatchingSize") is outside the -n/-x size limits. Left as it is.${CLEAR}\n"
+        echo "Incomplete download of $FileName left as it is: outside the -n/-x size limits" >>"$LOG_FILE"
+      else
+        echo -e "${YELLOW_REGULAR}    Incomplete download detected\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n"
+        LocalRequiresDownloadArray+=(1)
+        AnyDownloads=1
+      fi
+      continue
+    fi
 
     if [ $VERIFY_LIBRARY -eq 1 ] && [ $FileSizeAcceptable -eq 0 ]; then
       if [ $FileTooSmall -eq 1 ]; then
