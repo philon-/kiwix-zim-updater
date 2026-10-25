@@ -745,6 +745,8 @@ main() {
   AnyVerifyFailed=0
   # Locks of downloads that failed in this run: the cleanup keeps them (and the partial file), so the next run resumes
   ResumableLocks=()
+  # Locks of downloads that this run found larger than the meta4 size: those files are useless and are cleaned up
+  UnusableLocks=()
 
   for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
     RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
@@ -1115,17 +1117,20 @@ main() {
       [[ $DownloadFailed -eq 1 ]] && AnyDownloadFailed=1
       # An interrupted download (not larger than expected) is resumed with wget -c next run, which also just confirms a
       # file that is already complete. One that failed its checksum is gone; one that is too large cannot be resumed.
-      if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ -f "$LockFilePath" ]] && [[ -f "$NewZIMPath" ]] && \
-        ! { [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -gt $ExpectedSize ]]; }; then
-        ResumableLocks+=("$LockFilePath")
+      if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ -f "$LockFilePath" ]] && [[ -f "$NewZIMPath" ]]; then
+        if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -gt $ExpectedSize ]]; then
+          UnusableLocks+=("$LockFilePath")
+        else
+          ResumableLocks+=("$LockFilePath")
+        fi
       fi
 
       # in all of these cases, we will not re-purge and will leave the lockfile so we know to resume later
       if [[ $DownloadFailed -eq 1 ]] || [[ $SKIP_PURGE -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 1 ]]; then
         [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>"$LOG_FILE"
         [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>"$LOG_FILE"
-        [[ $DEBUG -eq 0 ]] && [[ $SKIP_PURGE -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm "$LockFilePath"
-        [[ $DEBUG -eq 0 ]] && [[ $VERIFY_LIBRARY -eq 1 ]] && [[ $RequiresDownload -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm "$LockFilePath"
+        [[ $DEBUG -eq 0 ]] && [[ $SKIP_PURGE -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm -f "$LockFilePath"
+        [[ $DEBUG -eq 0 ]] && [[ $VERIFY_LIBRARY -eq 1 ]] && [[ $RequiresDownload -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm -f "$LockFilePath"
         continue
       fi
 
@@ -1187,25 +1192,29 @@ main() {
 
         for ((i = 0; i < ${#HangingFileLocks[@]}; i++)); do
           baseFileName=$(echo "${HangingFileLocks[$i]}" | grep -ioP "(?<=\.~lock\.).*$")
-          if [[ " ${ResumableLocks[*]} " == *" ${HangingFileLocks[$i]} "* ]]; then
+          # Only files this run proved useless are deleted. Anything else behind a lock may be a complete ZIM whose
+          # run was killed while hashing it, or a partial another run (other -n/-x, a newer catalog) will resume.
+          if [[ ! -f "$ZIMPath$baseFileName" ]]; then
+            echo -e "  ${BLUE_BOLD}Removing stale lock without a download: ${HangingFileLocks[$i]}${CLEAR}"
+            echo "Removing stale lock without a download: ${HangingFileLocks[$i]}" >> "$LOG_FILE"
+            if [[ -f "$ZIMPath$baseFileName.sha256" ]]; then
+              echo -e "  ${BLUE_BOLD}Found abandoned checksum: $ZIMPath$baseFileName.sha256${CLEAR}"
+              echo "Found abandoned checksum: $ZIMPath$baseFileName.sha256" >> "$LOG_FILE"
+              rm -f "$ZIMPath$baseFileName.sha256"
+            fi
+            rm -f "${HangingFileLocks[$i]}"
+          elif [[ " ${UnusableLocks[*]} " == *" ${HangingFileLocks[$i]} "* ]]; then
+            echo -e "  ${RED_BOLD}Removing download that is larger than published, it cannot be resumed: $ZIMPath$baseFileName${CLEAR}"
+            echo "Removing download that is larger than published, it cannot be resumed: $ZIMPath$baseFileName" >> "$LOG_FILE"
+            rm -f "$ZIMPath$baseFileName" "$ZIMPath$baseFileName.sha256" "${HangingFileLocks[$i]}"
+          elif [[ " ${ResumableLocks[*]} " == *" ${HangingFileLocks[$i]} "* ]]; then
             echo -e "  ${YELLOW_BOLD}Keeping interrupted download for the next run to resume: $ZIMPath$baseFileName${CLEAR}"
             echo "Keeping interrupted download for the next run to resume: $ZIMPath$baseFileName" >> "$LOG_FILE"
-            echo
-            continue
+          else
+            echo -e "  ${YELLOW_BOLD}Keeping an interrupted download left by an earlier run: $ZIMPath$baseFileName${CLEAR}"
+            echo -e "  ${YELLOW_BOLD}  It is resumed when that ZIM is updated again; delete it and ${HangingFileLocks[$i]} if you no longer need it.${CLEAR}"
+            echo "Keeping an interrupted download left by an earlier run: $ZIMPath$baseFileName (lock ${HangingFileLocks[$i]})" >> "$LOG_FILE"
           fi
-          echo -e "  ${RED_BOLD}Found broken lock: ${HangingFileLocks[$i]}${CLEAR}"
-          echo "Found broken lock: ${HangingFileLocks[$i]}" >> "$LOG_FILE"
-          if [[ -f "$ZIMPath$baseFileName" ]]; then
-            echo -e "  ${BLUE_BOLD}Found abandoned download: $ZIMPath$baseFileName${CLEAR}"
-            echo -e "Found abandoned download: $ZIMPath$baseFileName" >> "$LOG_FILE"
-            rm "$ZIMPath$baseFileName"
-          fi
-          if [[ -f "$ZIMPath$baseFileName.sha256" ]]; then
-            echo -e "  ${BLUE_BOLD}Found abandoned checksum: $ZIMPath$baseFileName.sha256${CLEAR}"
-            echo -e "Found abandoned checksum: $ZIMPath$baseFileName.sha256" >> "$LOG_FILE"
-            rm "$ZIMPath$baseFileName.sha256"
-          fi
-          rm  "${HangingFileLocks[$i]}"
           echo
         done
       fi

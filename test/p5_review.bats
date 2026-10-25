@@ -62,3 +62,60 @@ keep_copy() {
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
   cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
 }
+
+@test "R1: -d -p keeps an old ZIM that carries a stale lock" {
+  make_local_zim "$WOLD"
+  keep_copy "$WOLD"
+  touch "$ZIMS/.~lock.$WOLD"
+  run_updater -d -p "$ZIMS"
+  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  assert_output --partial 'Keeping an interrupted download left by an earlier run'
+}
+
+@test "R1: without -p, a verified update still purges an old ZIM with a stale lock and removes the lock" {
+  make_local_zim "$WOLD"
+  touch "$ZIMS/.~lock.$WOLD"
+  run_updater -d "$ZIMS"
+  assert_success
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ ! -e "$ZIMS/$WOLD" ]]
+  [[ ! -e "$ZIMS/.~lock.$WOLD" ]]
+}
+
+@test "R6: a partial left by an earlier run is kept when this run does not touch it" {
+  make_local_zim small_test_2025-01.zim
+  make_local_zim big_test_2025-01.zim
+  head -c 1000 "$(remote_file zim/other/big_test_2026-03.zim)" >"$ZIMS/big_test_2026-03.zim"
+  touch "$ZIMS/.~lock.big_test_2026-03.zim"
+  run_updater -d -x 2Ki "$ZIMS"
+  assert_success
+  [[ -s "$ZIMS/big_test_2026-03.zim" ]]
+  [[ -f "$ZIMS/.~lock.big_test_2026-03.zim" ]]
+  # ...and a later run without the size limit resumes and finishes it
+  run_updater -d "$ZIMS"
+  assert_success
+  cmp "$ZIMS/big_test_2026-03.zim" "$(remote_file zim/other/big_test_2026-03.zim)"
+  [[ ! -e "$ZIMS/.~lock.big_test_2026-03.zim" ]]
+  [[ ! -e "$ZIMS/big_test_2025-01.zim" ]]
+}
+
+@test "R6: a stale lock without its download is removed, with its orphaned checksum" {
+  make_local_zim "$WOLD"
+  touch "$ZIMS/.~lock.ghost_test_2026-01.zim"
+  printf '%064d ghost_test_2026-01.zim\n' 0 >"$ZIMS/ghost_test_2026-01.zim.sha256"
+  run_updater -d "$ZIMS"
+  assert_success
+  [[ ! -e "$ZIMS/.~lock.ghost_test_2026-01.zim" ]]
+  [[ ! -e "$ZIMS/ghost_test_2026-01.zim.sha256" ]]
+}
+
+@test "R10: -f -d -p finishing an interrupted current download prints no 'cannot remove'" {
+  head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
+  touch "$ZIMS/.~lock.$W"
+  run_updater --separate-stderr -f -d -p "$ZIMS"
+  assert_success
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  [[ "$stderr" != *"cannot remove"* ]]
+}
