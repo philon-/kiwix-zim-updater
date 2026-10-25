@@ -26,6 +26,8 @@ Basenames=()
 RemotePaths=()
 # Contains the folder this file is in relative to /zims/
 RemoteCategory=()
+# Contains the catalog size of each remote file
+FileSizes=()
 
 # Set Script Strings
 SCRIPT="$(readlink -f "$0")"
@@ -45,6 +47,15 @@ CHECKSUM_FILES=1
 VERIFY_LIBRARY=0
 FORCE_FETCH_INDEX=0
 DOWNLOAD_METHOD=1 # 1: web 2: torrent
+SKIP_PURGE=0
+COUNTRY_CODE="" # -l: preferred mirror country, empty for kiwix's default
+POSITIONAL_ARGS=()
+# Per-file download state, reset again for every ZIM in the download loop
+DownloadFailed=0
+IsMirror=0
+DownloadURL=""
+ExpectedSize=""
+ExpectedHash=""
 # Extra wget options for .meta4 requests. GNU Wget2 follows metalinks by default and would hand us the ZIM itself
 # instead of the metadata; wget 1.x rejects --no-metalink, so this is filled in by detect_wget_flavor.
 WGET_META_OPTS=()
