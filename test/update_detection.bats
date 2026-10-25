@@ -7,10 +7,10 @@ setup() {
 }
 
 @test "detect: an older local ZIM has an update" {
-  make_local_zim wikipedia_en_test_2025-12.zim
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
-  assert_output --partial 'wikipedia_en_test_2025-12.zim  [wikipedia]'
+  assert_output --partial "$WP_OLD  [wikipedia]"
   assert_output --partial 'Update found! --> 2026-01'
 }
 
@@ -22,7 +22,7 @@ setup() {
 }
 
 @test "detect: an equal local ZIM has no new update" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial 'No new update'
@@ -39,14 +39,14 @@ setup() {
 }
 
 @test "detect: local 2026-02 vs remote 2026-02a (letter suffix) is an update" {
-  make_local_zim wiktionary_fr_test_2026-02.zim
+  make_local_zim "$WT_OLD"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial 'Update found! --> 2026-02a'
 }
 
 @test "detect: local 2026-02a equal to remote 2026-02a has no new update" {
-  make_local_zim wiktionary_fr_test_2026-02a.zim --from-remote zim/wiktionary/wiktionary_fr_test_2026-02a.zim
+  make_local_zim "$WT_NEW" --from-remote "$WT_REMOTE"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial 'No new update'
@@ -61,9 +61,9 @@ setup() {
 }
 
 @test "detect: non-.zim files in the ZIM directory are ignored" {
-  make_local_zim wikipedia_en_test_2025-12.zim
+  make_local_zim "$WP_OLD"
   printf 'x' >"$ZIMS/notes.txt"
-  printf 'x' >"$ZIMS/wikipedia_en_test_2025-12.zim.sha256"
+  printf 'x' >"$ZIMS/$WP_OLD.sha256"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial '1 ZIM(s) found.'
@@ -76,34 +76,34 @@ setup() {
 
 @test "detect: two local versions of one ZIM - the older is disregarded" {
   make_local_zim wikipedia_en_test_2025-06.zim
-  make_local_zim wikipedia_en_test_2025-12.zim
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial '1 ZIM(s) found.'
-  assert_output --partial '- wikipedia_en_test_2025-12.zim:'
+  assert_output --partial "- $WP_OLD:"
   refute_output --partial '- wikipedia_en_test_2025-06.zim:'
   run download_log
-  assert_line 'Disregarding wikipedia_en_test_2025-06.zim because it is shadowed by wikipedia_en_test_2025-12.zim'
+  assert_line "Disregarding wikipedia_en_test_2025-06.zim because it is shadowed by $WP_OLD"
 }
 
 @test "detect: local 2026-02 and 2026-02a - 02 is shadowed by 02a" {
-  make_local_zim wiktionary_fr_test_2026-02.zim
-  make_local_zim wiktionary_fr_test_2026-02a.zim --from-remote zim/wiktionary/wiktionary_fr_test_2026-02a.zim
+  make_local_zim "$WT_OLD"
+  make_local_zim "$WT_NEW" --from-remote "$WT_REMOTE"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial '1 ZIM(s) found.'
   assert_output --partial 'No new update'
   run download_log
-  assert_line 'Disregarding wiktionary_fr_test_2026-02.zim because it is shadowed by wiktionary_fr_test_2026-02a.zim'
+  assert_line "Disregarding $WT_OLD because it is shadowed by $WT_NEW"
 }
 
 @test "detect: an interrupted newer download is disregarded in favour of the old ZIM" {
-  make_local_zim wikipedia_en_test_2025-12.zim
-  make_local_zim wikipedia_en_test_2026-01.zim 'partial'
-  : >"$ZIMS/.~lock.wikipedia_en_test_2026-01.zim"
+  make_local_zim "$WP_OLD"
+  make_local_zim "$WP_NEW" 'partial'
+  : >"$ZIMS/.~lock.$WP_NEW"
   run_updater "$ZIMS"
   assert_success
-  assert_output --partial '- wikipedia_en_test_2025-12.zim:'
+  assert_output --partial "- $WP_OLD:"
   run download_log
-  assert_line 'Disregarding wikipedia_en_test_2026-01.zim because it was interrupted by wikipedia_en_test_2025-12.zim'
+  assert_line "Disregarding $WP_NEW because it was interrupted by $WP_OLD"
 }

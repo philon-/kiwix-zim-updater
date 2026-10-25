@@ -6,15 +6,13 @@ setup() {
   common_setup
 }
 
-OLD_WP=wikipedia_en_test_2025-12.zim
-
 ###############################################################################
 # Opt-in
 
 @test "H8: a default run makes no git call, even next to a .git" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=current
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial '1. Checking for Script Updates...'
@@ -25,7 +23,7 @@ OLD_WP=wikipedia_en_test_2025-12.zim
 
 @test "H8: -u and --skip-update are still accepted and run no git" {
   mkdir "$SANDBOX/bin/.git"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -u "$ZIMS"
   assert_success
   run_updater --skip-update "$ZIMS"
@@ -42,7 +40,7 @@ OLD_WP=wikipedia_en_test_2025-12.zim
 }
 
 @test "H8: -U outside a git clone skips the update with a message" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'Git Clone Not Detected: Skipping Update Check'
@@ -53,7 +51,7 @@ OLD_WP=wikipedia_en_test_2025-12.zim
 @test "H8: --self-update on another branch skips the update" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=other-branch
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater --self-update "$ZIMS"
   assert_success
   assert_output --partial 'You appear to be on a different branch'
@@ -142,7 +140,7 @@ head_of() {
 @test "H8: -U with an update available fast-forwards, re-execs once and completes" {
   setup_clone
   push_update
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'Version: Mismatched'
@@ -162,7 +160,7 @@ head_of() {
 
 @test "H8: -U when up to date reports Version: Current and pulls nothing" {
   setup_clone
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'Version: Current'
@@ -177,7 +175,7 @@ head_of() {
   echo 'my local edit' >>"$SANDBOX/clone/NOTES"
   local before
   before="$(head_of "$SANDBOX/clone")"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'has local changes: Not updating'
@@ -197,7 +195,7 @@ head_of() {
   setup_clone
   push_update
   echo 'scratch' >"$SANDBOX/clone/untracked.txt"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'has local changes: Not updating'
@@ -210,7 +208,7 @@ head_of() {
   setup_clone
   push_update
   sgit -C "$SANDBOX/clone" remote set-url origin "$SANDBOX/missing.git"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'Could not fetch updates'
@@ -230,7 +228,7 @@ head_of() {
   sgit -C "$SANDBOX/clone" commit -q -am 'local'
   local before
   before="$(head_of "$SANDBOX/clone")"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'Update failed'
@@ -242,7 +240,7 @@ head_of() {
 @test "H8: without -U a clone with an update available makes no git call" {
   setup_clone
   push_update
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone "$ZIMS"
   assert_success
   assert_output --partial 'Check Skipped (use -U to enable)'
@@ -260,7 +258,7 @@ head_of() {
   push_update
   chmod a-x "$CLONE_SCRIPT"
   sgit -C "$SANDBOX/clone" config core.fileMode false
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   cd "$SANDBOX/clone" || return 1
   PATH="$SANDBOX/realgit:$PATH" run bash kiwix-zim-updater.sh -U "$ZIMS"
   assert_success
@@ -281,7 +279,7 @@ head_of() {
   push_update
   # An untracked file must still be seen (the leaked ignore-everything rules would hide it) ...
   echo 'scratch' >"$SANDBOX/clone/untracked.txt"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_output --partial 'local changes'
   # ... and nothing reached the decoy repository

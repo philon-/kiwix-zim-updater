@@ -11,10 +11,8 @@ teardown() {
   chmod u+w "$ZIMS" 2>/dev/null || true
 }
 
-OLD_WP=wikipedia_en_test_2025-12.zim
-
 @test "N8: -d on a read-only ZIM dir changes nothing and exits 1" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   chmod a-w "$ZIMS"
   local before
   before="$(zim_dir_snapshot)"
@@ -26,7 +24,7 @@ OLD_WP=wikipedia_en_test_2025-12.zim
 }
 
 @test "N8: a plain dry-run on a read-only ZIM dir still exits 0" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   chmod a-w "$ZIMS"
   run_updater "$ZIMS"
   assert_success

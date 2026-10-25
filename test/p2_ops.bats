@@ -7,14 +7,12 @@ setup() {
   common_setup
 }
 
-OLD_WP=wikipedia_en_test_2025-12.zim
-
 ###############################################################################
 # H7: dependency preflight
 
 @test "H7: several missing tools are all named on stderr, before any network access" {
   make_tooldir wget numfmt flock
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   PATH="$TOOLDIR" run_updater --separate-stderr "$ZIMS"
   assert_failure 1
   [[ "$stderr" == *"wget"* ]]
@@ -36,7 +34,7 @@ done
 exec "$real_grep" "\$@"
 EOF
   chmod +x "$TOOLDIR/grep"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   PATH="$TOOLDIR" run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'grep -P'
@@ -45,7 +43,7 @@ EOF
 @test "H7: git is required when the self-update would run" {
   make_tooldir git
   mkdir "$SANDBOX/bin/.git"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   PATH="$TOOLDIR" run_updater -U "$ZIMS"
   assert_failure 1
   assert_output --partial 'git'
@@ -54,7 +52,7 @@ EOF
 @test "H7: git is not required without -U, even in a git clone" {
   make_tooldir git
   mkdir "$SANDBOX/bin/.git"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   PATH="$TOOLDIR" run_updater "$ZIMS"
   assert_success
   refute_output --partial 'Missing required tool'
@@ -62,7 +60,7 @@ EOF
 
 @test "H7: git is not required outside a git clone" {
   make_tooldir git
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   PATH="$TOOLDIR" run_updater -U "$ZIMS"
   assert_success
   refute_output --partial 'Missing required tool'
@@ -78,7 +76,7 @@ teardown() {
 }
 
 @test "H6: a held lock is reported on stderr and creates nothing in the ZIM dir" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   local before
   before="$(zim_dir_snapshot)"
   exec 8<"$ZIMS"
@@ -95,7 +93,7 @@ teardown() {
 
 @test "H6: a lock on another ZIM dir does not block this one" {
   mkdir "$SANDBOX/other"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   exec 8<"$SANDBOX/other"
   flock -n 8
   run_updater "$ZIMS"
@@ -104,7 +102,7 @@ teardown() {
 }
 
 @test "H6: the lock is released when a run ends, so the next run works" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   run_updater "$ZIMS"
@@ -117,7 +115,7 @@ teardown() {
 
 @test "H6: a dry run on a read-only ZIM dir still works with the lock" {
   [[ $(id -u) -ne 0 ]] || skip "root ignores directory permissions"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   chmod a-w "$ZIMS"
   local before
   before="$(zim_dir_snapshot)"
@@ -129,7 +127,7 @@ teardown() {
 
 @test "H6: the lock is also taken on a read-only ZIM dir" {
   [[ $(id -u) -ne 0 ]] || skip "root ignores directory permissions"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   chmod a-w "$ZIMS"
   exec 8<"$ZIMS"
   flock -n 8
@@ -156,7 +154,7 @@ age_index() {
 }
 
 @test "H4: the index has the date on its first line and one link line per ZIM" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   run head -1 "$RUN_DIR/$INDEX"
@@ -168,7 +166,7 @@ age_index() {
 }
 
 @test "H4: a fresh cached index is reused without fetching the catalog" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   catalog_fetched
@@ -183,7 +181,7 @@ age_index() {
 }
 
 @test "H4: -g fetches the catalog even with a fresh index" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   : >"$FAKE_WGET_LOG"
@@ -193,7 +191,7 @@ age_index() {
 }
 
 @test "H4: an index older than a day is refreshed" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   age_index '2 days ago'
   : >"$FAKE_WGET_LOG"
@@ -205,7 +203,7 @@ age_index() {
 }
 
 @test "H4: a cached index without links is not reused" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   date -u +%Y-%m-%dT%H:%M:%S >"$RUN_DIR/$INDEX"
   run_updater "$ZIMS"
   assert_success
@@ -214,7 +212,7 @@ age_index() {
 }
 
 @test "H4: a failed -g refetch exits 1 and leaves the existing index untouched" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   cp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
   export FAKE_WGET_CATALOG_FAIL=1
@@ -227,7 +225,7 @@ age_index() {
 }
 
 @test "H4: a failed refresh of a stale index exits 1 and leaves it untouched" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   age_index '2 days ago'
   cp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
@@ -242,7 +240,7 @@ age_index() {
 @test "H4: a catalog without an <updated> date exits 1 and is not cached" {
   use_fixture_copy
   sed -i '/<updated>/d' "$FAKE_FIXTURES/catalog.xml"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'no <updated> date'
@@ -250,7 +248,7 @@ age_index() {
 }
 
 @test "H4: a catalog without ZIM links exits 1 and does not replace the index" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   cp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
   use_fixture_copy

@@ -7,10 +7,6 @@ setup() {
   common_setup
 }
 
-NEW_WP=wikipedia_en_test_2026-01.zim
-OLD_WP=wikipedia_en_test_2025-12.zim
-WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
-
 ###############################################################################
 # usage errors (exit 2)
 
@@ -29,8 +25,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "p2-cli: a file instead of a ZIM directory exits 2" {
-  make_local_zim "$OLD_WP"
-  run_updater "$ZIMS/$OLD_WP"
+  make_local_zim "$WP_OLD"
+  run_updater "$ZIMS/$WP_OLD"
   assert_failure 2
   assert_output --partial 'is not a directory'
 }
@@ -39,43 +35,43 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 # runtime results (exit 0 / 1)
 
 @test "p2-cli: a successful update exits 0" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -d -c "$ZIMS"
   assert_success
-  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$OLD_WP"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/$WP_OLD"
 }
 
 @test "p2-cli: nothing to update exits 0" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -d "$ZIMS"
   assert_success
   assert_output --partial 'Nothing to download'
 }
 
 @test "p2-cli: after a failed download the next ZIM is still processed, then exit 1" {
-  make_local_zim "$OLD_WP"
-  make_local_zim wiktionary_fr_test_2026-02.zim
-  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  make_local_zim "$WT_OLD"
+  export FAKE_WGET_FAIL="$WP_NEW"
   run_updater -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'One or more downloads failed'
-  assert_exists "$ZIMS/$OLD_WP"
-  cmp "$ZIMS/wiktionary_fr_test_2026-02a.zim" "$(remote_file zim/wiktionary/wiktionary_fr_test_2026-02a.zim)"
-  refute_exists "$ZIMS/wiktionary_fr_test_2026-02.zim"
+  assert_exists "$ZIMS/$WP_OLD"
+  cmp "$ZIMS/$WT_NEW" "$(remote_file "$WT_REMOTE")"
+  refute_exists "$ZIMS/$WT_OLD"
 }
 
 @test "p2-cli: a failed torrent download exits 1" {
-  make_local_zim "$OLD_WP"
-  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01.zim.torrent
+  make_local_zim "$WP_OLD"
+  export FAKE_WGET_FAIL="$WP_NEW.torrent"
   run_updater -d -t "$ZIMS"
   assert_failure 1
   assert_output --partial 'Torrent download failed'
 }
 
 @test "p2-cli: a failed download in dry-run is never attempted and exits 0" {
-  make_local_zim "$OLD_WP"
-  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  export FAKE_WGET_FAIL="$WP_NEW"
   run_updater "$ZIMS"
   assert_success
 }
@@ -83,14 +79,14 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 @test "p2-cli: a catalog with more than one download host exits 1" {
   use_fixture_copy
   sed -i '0,/https:\/\/download\.kiwix\.test\/zim\//s##https://other.kiwix.test/zim/#' "$FAKE_FIXTURES/catalog.xml"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'Too many zim base urls found'
 }
 
 @test "p2-cli: -f together with -t aborts with exit 2 (-f implies -c)" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater --separate-stderr -f -t "$ZIMS"
   assert_failure 2
   [[ "$stderr" == *'Calculating Checksum not available with torrenting'* ]]
@@ -102,7 +98,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 # argument validation (H5)
 
 @test "p2-cli: -n with a valid size (1G) is accepted" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -n 1G "$ZIMS"
   assert_success
   assert_output --partial 'Update skipped (minimum'
@@ -117,7 +113,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "p2-cli: -x without a value exits 2 with usage on stderr" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater --separate-stderr "$ZIMS" -x
   assert_failure 2
   [[ "$stderr" == *'-x requires a size'* ]]
@@ -127,20 +123,20 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "p2-cli: -n followed by another option exits 2" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -n -d "$ZIMS"
   assert_failure 2
   assert_output --partial "Invalid minimum size: '-d'"
 }
 
 @test "p2-cli: a fractional byte size exits 2" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -n 1.5 "$ZIMS"
   assert_failure 2
 }
 
 @test "p2-cli: an unknown short option exits 2 with usage" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -z "$ZIMS"
   assert_failure 2
   assert_output --partial 'Unknown option: -z'
@@ -148,21 +144,21 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "p2-cli: -l without a value exits 2" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS" -l
   assert_failure 2
   assert_output --partial '-l requires a country code'
 }
 
 @test "p2-cli: -l followed by another option exits 2 instead of eating it" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -l -d "$ZIMS"
   assert_failure 2
   assert_output --partial '-l requires a country code'
 }
 
 @test "p2-cli: an invalid -l code still falls back and runs" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater --separate-stderr -l se "$ZIMS"
   assert_success
   [[ "$stderr" == *"Invalid country code 'se'"* ]]
@@ -183,7 +179,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "N6a: -f exits 1 when a ZIM cannot be verified (metadata unavailable)" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   export FAKE_WGET_META_FAIL=1
   run_updater -f "$ZIMS"
   assert_failure 1
@@ -191,27 +187,27 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "N6a: -f on a healthy library exits 0" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -f -d "$ZIMS"
   assert_success
   assert_output --partial 'Checksum passed'
 }
 
 @test "N7a: a failed download keeps its partial .part file so the next run resumes it" {
-  make_local_zim "$OLD_WP"
-  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  export FAKE_WGET_FAIL="$WP_NEW"
   run_updater -d "$ZIMS"
   assert_failure 1
-  assert_nonempty "$ZIMS/$NEW_WP.part"
-  refute_exists "$ZIMS/$NEW_WP"
-  refute_exists "$ZIMS/.~lock.$NEW_WP"
-  assert_exists "$ZIMS/$OLD_WP"
-  assert_output --partial "Keeping interrupted download for the next run to resume: $ZIMS/$NEW_WP.part"
+  assert_nonempty "$ZIMS/$WP_NEW.part"
+  refute_exists "$ZIMS/$WP_NEW"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
+  assert_exists "$ZIMS/$WP_OLD"
+  assert_output --partial "Keeping interrupted download for the next run to resume: $ZIMS/$WP_NEW.part"
 }
 
 @test "N7a: the next run resumes the interrupted download and completes the update" {
-  make_local_zim "$OLD_WP"
-  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  export FAKE_WGET_FAIL="$WP_NEW"
   run_updater -d "$ZIMS"
   assert_failure 1
   unset FAKE_WGET_FAIL
@@ -221,21 +217,21 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_output --partial 'ZIM download was interrupted. Continuing...'
   run wget_downloads
   assert_output --partial ' -c '
-  cmp "$ZIMS/$NEW_WP" "$(remote_file zim/wikipedia/wikipedia_en_test_2026-01.zim)"
-  refute_exists "$ZIMS/$OLD_WP"
-  refute_exists "$ZIMS/.~lock.$NEW_WP"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/$WP_OLD"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
 }
 
 @test "N7a: a download that is too large is not kept for resuming" {
   use_fixture_copy
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   # Serve more bytes than the meta4 announces: wget -c can never fix that.
-  printf 'extra' >>"$(remote_file zim/wikipedia/wikipedia_en_test_2026-01.zim)"
+  printf 'extra' >>"$(remote_file "$WP_REMOTE")"
   run_updater -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'it is larger than published and cannot be resumed'
-  refute_exists "$ZIMS/$NEW_WP.part"
-  refute_exists "$ZIMS/.~lock.$NEW_WP"
-  refute_exists "$ZIMS/$NEW_WP"
-  assert_exists "$ZIMS/$OLD_WP"
+  refute_exists "$ZIMS/$WP_NEW.part"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
+  refute_exists "$ZIMS/$WP_NEW"
+  assert_exists "$ZIMS/$WP_OLD"
 }

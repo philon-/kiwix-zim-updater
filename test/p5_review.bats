@@ -6,88 +6,84 @@ setup() {
   common_setup
 }
 
-W=wikipedia_en_test_2026-01.zim
-WOLD=wikipedia_en_test_2025-01.zim
-WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
-
 @test "R4: -c keeps the old ZIM when the metadata has no sha256 to check the download against" {
   use_fixture_copy
-  sed -i '/sha-256/d' "$(remote_file "$WREMOTE.meta4")"
-  make_local_zim "$WOLD"
-  keep_copy "$WOLD"
+  sed -i '/sha-256/d' "$(remote_file "$WP_REMOTE.meta4")"
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
   run_updater -d -c "$ZIMS"
   assert_failure 1
-  assert_output --partial "No valid sha256 published for $W"
+  assert_output --partial "No valid sha256 published for $WP_NEW"
   refute_output --partial 'Old ZIM purged'
-  assert_zim_unchanged "$WOLD"
+  assert_zim_unchanged "$WP_OLD"
 }
 
 @test "R4: dry-run -c without a published sha256 only reports it" {
   use_fixture_copy
-  sed -i '/sha-256/d' "$(remote_file "$WREMOTE.meta4")"
-  make_local_zim "$WOLD"
+  sed -i '/sha-256/d' "$(remote_file "$WP_REMOTE.meta4")"
+  make_local_zim "$WP_OLD"
   run_updater -c "$ZIMS"
   assert_success
   assert_output --partial 'the checksum could not be verified'
 }
 
 @test "R2: an intact only copy with a stale lock survives and is never re-downloaded" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
-  make_local_sha256 "$W"
-  touch "$ZIMS/.~lock.$W"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
+  touch "$ZIMS/.~lock.$WP_NEW"
   # Since N11 a complete locked file is verified instead of resumed, so a network failure cannot touch it
-  FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
+  FAKE_WGET_NETFAIL="$WP_NEW" run_updater -d "$ZIMS"
   assert_success
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  assert_exists "$ZIMS/$W.sha256"
-  refute_exists "$ZIMS/.~lock.$W"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  assert_exists "$ZIMS/$WP_NEW.sha256"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
   run wget_downloads
   assert_output ''
 }
 
 @test "R2: a complete new download with a stale lock completes the update without downloading again" {
-  make_local_zim "$WOLD"
-  cp "$(remote_file "$WREMOTE")" "$ZIMS/$W"
-  touch "$ZIMS/.~lock.$W"
-  FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
+  make_local_zim "$WP_OLD"
+  cp "$(remote_file "$WP_REMOTE")" "$ZIMS/$WP_NEW"
+  touch "$ZIMS/.~lock.$WP_NEW"
+  FAKE_WGET_NETFAIL="$WP_NEW" run_updater -d "$ZIMS"
   assert_success
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  refute_exists "$ZIMS/$WOLD"
-  refute_exists "$ZIMS/.~lock.$W"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/$WP_OLD"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
 }
 
 @test "R2: a shorter interrupted download whose resume fails is kept for the next run" {
-  make_local_zim "$WOLD"
-  keep_copy "$WOLD"
-  head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
-  touch "$ZIMS/.~lock.$W"
-  FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
+  head -c 1000 "$(remote_file "$WP_REMOTE")" >"$ZIMS/$WP_NEW"
+  touch "$ZIMS/.~lock.$WP_NEW"
+  FAKE_WGET_NETFAIL="$WP_NEW" run_updater -d "$ZIMS"
   assert_failure 1
   # The old-style locked partial next to an older version becomes a .part file and is kept for resuming
-  assert_nonempty "$ZIMS/$W.part"
-  refute_exists "$ZIMS/$W"
-  refute_exists "$ZIMS/.~lock.$W"
-  assert_zim_unchanged "$WOLD"
+  assert_nonempty "$ZIMS/$WP_NEW.part"
+  refute_exists "$ZIMS/$WP_NEW"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
+  assert_zim_unchanged "$WP_OLD"
 }
 
 @test "R1: -d -p keeps an old ZIM that carries a stale lock" {
-  make_local_zim "$WOLD"
-  keep_copy "$WOLD"
-  touch "$ZIMS/.~lock.$WOLD"
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
+  touch "$ZIMS/.~lock.$WP_OLD"
   run_updater -d -p "$ZIMS"
-  assert_zim_unchanged "$WOLD"
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  assert_zim_unchanged "$WP_OLD"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
   assert_output --partial 'Keeping an interrupted download left by an older version of this script'
 }
 
 @test "R1: without -p, a verified update still purges an old ZIM with a stale lock and removes the lock" {
-  make_local_zim "$WOLD"
-  touch "$ZIMS/.~lock.$WOLD"
+  make_local_zim "$WP_OLD"
+  touch "$ZIMS/.~lock.$WP_OLD"
   run_updater -d "$ZIMS"
   assert_success
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  refute_exists "$ZIMS/$WOLD"
-  refute_exists "$ZIMS/.~lock.$WOLD"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/$WP_OLD"
+  refute_exists "$ZIMS/.~lock.$WP_OLD"
 }
 
 @test "R6: a partial left by an earlier run is kept when this run does not touch it" {
@@ -108,7 +104,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "R6: a stale lock without its download is removed, with its orphaned checksum" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   touch "$ZIMS/.~lock.ghost_test_2026-01.zim"
   printf '%064d ghost_test_2026-01.zim\n' 0 >"$ZIMS/ghost_test_2026-01.zim.sha256"
   run_updater -d "$ZIMS"
@@ -118,78 +114,78 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "R10: -f -d -p finishing an interrupted current download prints no 'cannot remove'" {
-  head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
-  touch "$ZIMS/.~lock.$W"
+  head -c 1000 "$(remote_file "$WP_REMOTE")" >"$ZIMS/$WP_NEW"
+  touch "$ZIMS/.~lock.$WP_NEW"
   run_updater --separate-stderr -f -d -p "$ZIMS"
   assert_success
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  refute_exists "$ZIMS/.~lock.$W"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
   [[ "$stderr" != *"cannot remove"* ]]
 }
 
 @test "R3: -f -d verifies a locked outdated ZIM against its own checksum and never deletes it" {
-  make_local_zim "$WOLD"
-  make_local_sha256 "$WOLD"
-  keep_copy "$WOLD"
-  keep_copy "$WOLD.sha256"
-  touch "$ZIMS/.~lock.$WOLD"
-  export FAKE_WGET_FAIL="$W"
+  make_local_zim "$WP_OLD"
+  make_local_sha256 "$WP_OLD"
+  keep_copy "$WP_OLD"
+  keep_copy "$WP_OLD.sha256"
+  touch "$ZIMS/.~lock.$WP_OLD"
+  export FAKE_WGET_FAIL="$WP_NEW"
   run_updater -f -d "$ZIMS"
   assert_success
   assert_output --partial 'Cached Checksum Found'
   assert_output --partial 'Checksum passed'
-  assert_zim_unchanged "$WOLD"
-  assert_zim_unchanged "$WOLD.sha256"
+  assert_zim_unchanged "$WP_OLD"
+  assert_zim_unchanged "$WP_OLD.sha256"
   run wget_downloads
   assert_output ''
 }
 
 @test "R3: -f -d -p never rewrites a locked outdated ZIM's cached checksum with the newer release's hash" {
-  make_local_zim "$WOLD"
-  make_local_sha256 "$WOLD"
-  keep_copy "$WOLD.sha256"
-  touch "$ZIMS/.~lock.$WOLD"
+  make_local_zim "$WP_OLD"
+  make_local_sha256 "$WP_OLD"
+  keep_copy "$WP_OLD.sha256"
+  touch "$ZIMS/.~lock.$WP_OLD"
   run_updater -f -d -p "$ZIMS"
-  assert_zim_unchanged "$WOLD.sha256"
-  assert_exists "$ZIMS/$WOLD"
+  assert_zim_unchanged "$WP_OLD.sha256"
+  assert_exists "$ZIMS/$WP_OLD"
 }
 
 @test "R5: -f -d does not resume an update download for an outdated ZIM it checks by cached checksum" {
-  make_local_zim "$WOLD"
-  make_local_sha256 "$WOLD"
-  head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
-  keep_copy "$W"
-  touch "$ZIMS/.~lock.$W"
+  make_local_zim "$WP_OLD"
+  make_local_sha256 "$WP_OLD"
+  head -c 1000 "$(remote_file "$WP_REMOTE")" >"$ZIMS/$WP_NEW"
+  keep_copy "$WP_NEW"
+  touch "$ZIMS/.~lock.$WP_NEW"
   run_updater -f -d "$ZIMS"
   assert_success
   refute_output --partial 'resuming'
   refute_output --partial 'removing corrupt file'
-  assert_zim_unchanged "$W"
-  assert_exists "$ZIMS/.~lock.$W"
+  assert_zim_unchanged "$WP_NEW"
+  assert_exists "$ZIMS/.~lock.$WP_NEW"
   run wget_downloads
   assert_output ''
 }
 
 @test "R5: -f -d still finishes an interrupted download of the current catalog version" {
-  head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
-  touch "$ZIMS/.~lock.$W"
+  head -c 1000 "$(remote_file "$WP_REMOTE")" >"$ZIMS/$WP_NEW"
+  touch "$ZIMS/.~lock.$WP_NEW"
   run_updater -f -d "$ZIMS"
   assert_success
   assert_output --partial 'Incomplete download detected, resuming'
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  refute_exists "$ZIMS/.~lock.$W"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
 }
 
 @test "R7: dry-run -f exits 1 for a truncated current ZIM, like for a corrupt outdated one" {
-  make_local_zim "$W" "truncated"
+  make_local_zim "$WP_NEW" "truncated"
   run_updater -f "$ZIMS"
   assert_failure 1
   assert_output --partial 'File size verification failed'
 }
 
 @test "R7: dry-run -f -p says the purge would be skipped, not that it removes the file" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
-  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  printf 'X' | dd of="$ZIMS/$WP_NEW" bs=1 seek=10 conv=notrunc status=none
   run_updater -f -p "$ZIMS"
   assert_failure 1
   assert_output --partial 'Checksum failed but purge skipped'
@@ -197,8 +193,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "R9: -f verifies a current ZIM offline against its cached checksum" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
-  make_local_sha256 "$W"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
   # Run once online so the catalog index is cached, then go "offline"
   run_updater -f "$ZIMS"
   assert_success
@@ -210,9 +206,9 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "R9: offline -f still detects a corrupt current ZIM through its cached checksum" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
-  make_local_sha256 "$W"
-  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
+  printf 'X' | dd of="$ZIMS/$WP_NEW" bs=1 seek=10 conv=notrunc status=none
   export FAKE_WGET_META_FAIL=1
   run_updater -f "$ZIMS"
   assert_failure 1
@@ -221,10 +217,10 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 
 @test "wget2: downloads also carry --no-metalink, so -O is always honoured" {
   export FAKE_WGET_FLAVOR=wget2
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d "$ZIMS"
   assert_success
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
   run wget_downloads
   assert_output --partial -- '--no-metalink'
   run bash -c 'grep -e " -O " "$1" | grep -v -e " -O - " | grep -v -e --no-metalink' _ "$FAKE_WGET_LOG"
@@ -232,60 +228,60 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "N11: a complete locked download is verified, not re-requested (Wget2 would append it again)" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
-  make_local_sha256 "$W"
-  touch "$ZIMS/.~lock.$W"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
+  touch "$ZIMS/.~lock.$WP_NEW"
   export FAKE_WGET_FLAVOR=wget2
   run_updater -d -c "$ZIMS"
   assert_success
   assert_output --partial 'Interrupted download is already complete, verifying it'
   assert_output --partial 'Checksum passed'
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  refute_exists "$ZIMS/.~lock.$W"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
   run wget_downloads
   assert_output ''
 }
 
 @test "N11: a complete locked download that fails -c is deleted and the old ZIM is kept" {
-  make_local_zim "$WOLD"
-  keep_copy "$WOLD"
-  LC_ALL=C tr '\000-\377' '\001-\377\000' <"$(remote_file "$WREMOTE")" >"$ZIMS/$W"
-  touch "$ZIMS/.~lock.$W"
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
+  LC_ALL=C tr '\000-\377' '\001-\377\000' <"$(remote_file "$WP_REMOTE")" >"$ZIMS/$WP_NEW"
+  touch "$ZIMS/.~lock.$WP_NEW"
   run_updater -d -c "$ZIMS"
   assert_failure 1
   assert_output --partial 'Checksum failed'
-  assert_zim_unchanged "$WOLD"
-  refute_exists "$ZIMS/$W"
+  assert_zim_unchanged "$WP_OLD"
+  refute_exists "$ZIMS/$WP_NEW"
 }
 
 @test "N12: offline -f -d keeps a current ZIM that fails its cached checksum (no replacement can be verified)" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
-  make_local_sha256 "$W"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
   run_updater -f "$ZIMS"
-  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
-  keep_copy "$W"
-  keep_copy "$W.sha256"
+  printf 'X' | dd of="$ZIMS/$WP_NEW" bs=1 seek=10 conv=notrunc status=none
+  keep_copy "$WP_NEW"
+  keep_copy "$WP_NEW.sha256"
   : >"$FAKE_WGET_LOG"
   export FAKE_WGET_META_FAIL=1 FAKE_WGET_CATALOG_FAIL=1
   run_updater -f -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'Checksum failed against the cached checksum. File kept'
-  assert_zim_unchanged "$W"
-  assert_zim_unchanged "$W.sha256"
-  refute_exists "$ZIMS/.~lock.$W"
+  assert_zim_unchanged "$WP_NEW"
+  assert_zim_unchanged "$WP_NEW.sha256"
+  refute_exists "$ZIMS/.~lock.$WP_NEW"
   run wget_downloads
   assert_output ''
 }
 
 @test "N12: with only the meta4 down, -f -d keeps the ZIM instead of starting an unverifiable download" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
-  make_local_sha256 "$W"
-  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
-  keep_copy "$W"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
+  printf 'X' | dd of="$ZIMS/$WP_NEW" bs=1 seek=10 conv=notrunc status=none
+  keep_copy "$WP_NEW"
   export FAKE_WGET_META_FAIL=1
   run_updater -f -d "$ZIMS"
   assert_failure 1
-  assert_zim_unchanged "$W"
+  assert_zim_unchanged "$WP_NEW"
   run wget_downloads
   assert_output ''
 }

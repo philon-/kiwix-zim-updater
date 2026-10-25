@@ -17,6 +17,18 @@ STUB_BIN="$REPO_ROOT/test/helpers/bin"
 FIXTURES_SRC="$REPO_ROOT/test/fixtures"
 TEST_LIBS="$REPO_ROOT/test/libs"
 
+# Fixture names (see test/fixtures/catalog.xml). The catalog's current release of each title, an older local
+# release, and the path of the current release in the remote tree.
+# shellcheck disable=SC2034 # read by the test files, which shellcheck does not see
+{
+  WP_NEW=wikipedia_en_test_2026-01.zim
+  WP_OLD=wikipedia_en_test_2025-12.zim
+  WP_REMOTE=zim/wikipedia/$WP_NEW
+  WT_NEW=wiktionary_fr_test_2026-02a.zim
+  WT_OLD=wiktionary_fr_test_2026-02.zim
+  WT_REMOTE=zim/wiktionary/$WT_NEW
+}
+
 common_setup() {
   # Every suite uses run --separate-stderr or run's status checks, which need bats 1.5 (else warning BW02)
   bats_require_minimum_version 1.5.0

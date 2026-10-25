@@ -6,10 +6,8 @@ setup() {
   common_setup
 }
 
-OLD_WP=wikipedia_en_test_2025-12.zim
-
 @test "M5: running under the legacy name kiwix-zim.sh no longer exits 2" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   cp "$SCRIPT_COPY" "$SANDBOX/bin/kiwix-zim.sh"
   cd "$RUN_DIR"
   run bash "$SANDBOX/bin/kiwix-zim.sh" "$ZIMS"
@@ -37,7 +35,7 @@ OLD_WP=wikipedia_en_test_2025-12.zim
 }
 
 @test "N9: a current ZIM with an upper-case .ZIM extension is not downloaded again" {
-  make_local_zim wikipedia_en_test_2026-01.ZIM --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim wikipedia_en_test_2026-01.ZIM --from-remote "$WP_REMOTE"
   run_updater -d "$ZIMS"
   assert_success
   assert_output --partial 'No new update'

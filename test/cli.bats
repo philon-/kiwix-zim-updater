@@ -22,7 +22,7 @@ setup() {
 }
 
 @test "cli: default run is a dry-run and says so" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial 'DRY-RUN/SIMULATION'
@@ -31,7 +31,7 @@ setup() {
 }
 
 @test "cli: -d disables the dry-run banner" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -d "$ZIMS"
   assert_success
   assert_output --partial '- DISABLED -'
@@ -39,7 +39,7 @@ setup() {
 }
 
 @test "cli: without a .git next to the script, self-update is skipped and git never runs" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'Git Clone Not Detected: Skipping Update Check'
@@ -48,14 +48,14 @@ setup() {
 }
 
 @test "cli: -u skips the self-update check" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -u "$ZIMS"
   assert_success
   assert_output --partial 'Check Skipped'
 }
 
 @test "cli: the catalog is fetched once and cached in kiwix-index in the CWD" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater "$ZIMS"
   assert_success
   assert_exists "$RUN_DIR/kiwix-index"
@@ -73,7 +73,7 @@ setup() {
 }
 
 @test "cli: -g forces a fresh catalog fetch despite a valid cache" {
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater "$ZIMS"
   assert_success
   : >"$FAKE_WGET_LOG"
@@ -85,7 +85,7 @@ setup() {
 
 @test "cli: a catalog entry outside any category aborts with an array length mismatch" {
   add_root_level_catalog_entry
-  make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'CRITICAL ERROR!'

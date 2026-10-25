@@ -6,74 +6,70 @@ setup() {
   common_setup
 }
 
-W=wikipedia_en_test_2026-01.zim
-WOLD=wikipedia_en_test_2025-01.zim
-WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
-
 @test "network: every wget request carries connect/read timeouts and a retry limit" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d -f "$ZIMS"
   run_updater -d "$ZIMS"
   assert_success
   run bash -c 'grep -vx -- --version "$1" | grep -v -e "--connect-timeout=30 --read-timeout=300 --tries=3"' _ "$FAKE_WGET_LOG"
   assert_output ''
   grep -q -- '-O -' "$FAKE_WGET_LOG"
-  grep -q -- "-O $ZIMS/$W.part" "$FAKE_WGET_LOG"
+  grep -q -- "-O $ZIMS/$WP_NEW.part" "$FAKE_WGET_LOG"
 }
 
 GiB=1073741824
 
 @test "free space: a download that would leave less than --min-free (default 1Gi) is skipped, old ZIM kept" {
-  make_local_zim "$WOLD"
-  keep_copy "$WOLD"
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
   export FAKE_DF_AVAIL=$((GiB + 4095))
   run_updater -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'Download skipped, not enough free space'
   assert_output --partial 'must stay free (--min-free)'
-  assert_zim_unchanged "$WOLD"
-  refute_exists "$ZIMS/$W"
-  refute_exists "$ZIMS/$W.part"
+  assert_zim_unchanged "$WP_OLD"
+  refute_exists "$ZIMS/$WP_NEW"
+  refute_exists "$ZIMS/$WP_NEW.part"
   run wget_downloads
   assert_output ''
 }
 
 @test "free space: exactly enough room for the download plus the reserve is fine" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   export FAKE_DF_AVAIL=$((GiB + 4096))
   run_updater -d "$ZIMS"
   assert_success
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
 }
 
 @test "free space: only the bytes still missing from a .part count" {
-  make_local_zim "$WOLD"
-  head -c 4000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W.part"
+  make_local_zim "$WP_OLD"
+  head -c 4000 "$(remote_file "$WP_REMOTE")" >"$ZIMS/$WP_NEW.part"
   export FAKE_DF_AVAIL=$((GiB + 96))
   run_updater -d "$ZIMS"
   assert_success
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
 }
 
 @test "free space: --min-free sets the reserve, 0 disables it" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   export FAKE_DF_AVAIL=5000
   run_updater -d --min-free 0 "$ZIMS"
   assert_success
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
 }
 
 @test "free space: --min-free 2Gi is honoured" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   export FAKE_DF_AVAIL=$((GiB + GiB / 2))
   run_updater -d --min-free 2Gi "$ZIMS"
   assert_failure 1
   assert_output --partial '2.0Gi must stay free'
-  refute_exists "$ZIMS/$W.part"
+  refute_exists "$ZIMS/$WP_NEW.part"
 }
 
 @test "free space: an invalid --min-free is a usage error" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d --min-free lots "$ZIMS"
   assert_failure 2
   run_updater -d "$ZIMS" --min-free
@@ -81,7 +77,7 @@ GiB=1073741824
 }
 
 @test "free space: a dry-run only warns" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   export FAKE_DF_AVAIL=100
   local before
   before="$(zim_dir_snapshot)"
@@ -92,22 +88,22 @@ GiB=1073741824
 }
 
 @test "metadata outage: nothing is downloaded when the size cannot be verified, old ZIM kept" {
-  make_local_zim "$WOLD"
-  keep_copy "$WOLD"
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
   export FAKE_WGET_META_FAIL=1
   run_updater -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'Download skipped, metadata unavailable'
   run wget_downloads
   assert_output ''
-  assert_zim_unchanged "$WOLD"
-  refute_exists "$ZIMS/$W.part"
+  assert_zim_unchanged "$WP_OLD"
+  refute_exists "$ZIMS/$WP_NEW.part"
 }
 
 @test "internet outage: a -d run fails with exit 1 and leaves the ZIM directory byte-for-byte unchanged" {
-  make_local_zim "$WOLD"
-  make_local_sha256 "$WOLD"
-  printf 'interrupted' >"$ZIMS/$W.part"
+  make_local_zim "$WP_OLD"
+  make_local_sha256 "$WP_OLD"
+  printf 'interrupted' >"$ZIMS/$WP_NEW.part"
   run_updater -d "$ZIMS"
   assert_success
   local before
@@ -120,9 +116,9 @@ GiB=1073741824
 }
 
 @test "internet outage: -f -d -c --clean-partials changes nothing either" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
-  make_local_sha256 "$W"
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
+  make_local_zim "$WP_OLD"
   printf 'partial' >"$ZIMS/wikipedia_en_test_2025-06.zim.part"
   local before
   before="$(cd "$ZIMS" && find . -type f -exec sha256sum {} + | LC_ALL=C sort)"

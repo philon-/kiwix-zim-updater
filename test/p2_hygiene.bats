@@ -7,25 +7,21 @@ setup() {
   common_setup
 }
 
-NEW_WP=wikipedia_en_test_2026-01.zim
-OLD_WP=wikipedia_en_test_2025-12.zim
-WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
-
 ###############################################################################
 # M4: every global is initialised, so nothing leaks in from the environment.
 # common_setup unsets these variables; the tests export them deliberately.
 
 @test "M4: SKIP_PURGE=1 in the environment does not stop -d from purging" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   export SKIP_PURGE=1
   run_updater -d "$ZIMS"
   assert_success
-  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$OLD_WP"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/$WP_OLD"
 }
 
 @test "M4: SKIP_PURGE in the environment is never evaluated as arithmetic" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   export SKIP_PURGE="x[\$(touch '$SANDBOX/pwned')]"
   run_updater -d "$ZIMS"
   assert_success
@@ -33,7 +29,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "M4: COUNTRY_CODE in the environment does not reach the meta4 request" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   export COUNTRY_CODE=XX
   run_updater "$ZIMS"
   assert_success
@@ -44,24 +40,24 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "M4: POSITIONAL_ARGS in the environment does not replace the ZIM directory" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   export POSITIONAL_ARGS="$SANDBOX/elsewhere"
   run_updater "$ZIMS"
   assert_success
   refute_output --partial 'is not a directory'
-  assert_output --partial "- $OLD_WP:"
+  assert_output --partial "- $WP_OLD:"
 }
 
 ###############################################################################
 # M1: the ZIM directory is listed with a glob, not by parsing ls.
 
 @test "M1: a ZIM name with spaces is listed as one ZIM" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   make_local_zim 'my notes_test_2025-01.zim'
   run_updater "$ZIMS"
   assert_success
   assert_output --partial '✗ my notes_test_2025-01.zim  No online match found.'
-  assert_output --partial "✓ $OLD_WP  [wikipedia]"
+  assert_output --partial "✓ $WP_OLD  [wikipedia]"
   assert_output --partial '2 ZIM(s) found.'
 }
 
@@ -74,8 +70,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "M1: a directory named like a ZIM is ignored" {
-  make_local_zim "$OLD_WP"
-  mkdir "$ZIMS/x.zim" "$ZIMS/wiktionary_fr_test_2026-02.zim"
+  make_local_zim "$WP_OLD"
+  mkdir "$ZIMS/x.zim" "$ZIMS/$WT_OLD"
   run_updater "$ZIMS"
   assert_success
   refute_output --partial 'x.zim'
@@ -84,11 +80,11 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "M1: QUOTING_STYLE in the environment does not hide the ZIMs" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   export QUOTING_STYLE=shell-always
   run_updater "$ZIMS"
   assert_success
-  assert_output --partial "- $OLD_WP:"
+  assert_output --partial "- $WP_OLD:"
   assert_output --partial 'Update found!'
 }
 
@@ -107,21 +103,21 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 # N4: -S/--no-sha stops new .sha256 files from being written.
 
 @test "N4: -f -d -S still verifies the library but writes no .sha256" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -f -d -S "$ZIMS"
   assert_success
   assert_output --partial 'Checksum passed'
-  refute_exists "$ZIMS/$NEW_WP.sha256"
+  refute_exists "$ZIMS/$WP_NEW.sha256"
   run find "$ZIMS" -name '*.sha256*'
   assert_output ''
 }
 
 @test "N4: -f -d -S still detects and replaces a corrupt ZIM" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
-  printf 'X' | dd of="$ZIMS/$NEW_WP" bs=1 seek=10 conv=notrunc status=none
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  printf 'X' | dd of="$ZIMS/$WP_NEW" bs=1 seek=10 conv=notrunc status=none
   run_updater -f -d -S "$ZIMS"
   assert_output --partial 'Checksum failed, downloading a replacement'
-  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
   run find "$ZIMS" -name '*.sha256*'
   assert_output ''
 }

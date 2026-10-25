@@ -10,63 +10,56 @@ setup() {
   common_setup
 }
 
-NEW_WP=wikipedia_en_test_2026-01.zim
-OLD_WP=wikipedia_en_test_2025-12.zim
-WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
-OLD_WT=wiktionary_fr_test_2026-02.zim
-NEW_WT=wiktionary_fr_test_2026-02a.zim
-WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
-
 ###############################################################################
 # F: data safety
 
 @test "F1: a failed download (wget exit 4) keeps the old ZIM" {
-  make_local_zim "$OLD_WP"
-  keep_copy "$OLD_WP"
-  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
+  export FAKE_WGET_FAIL="$WP_NEW"
   run_updater -d "$ZIMS"
-  assert_zim_unchanged "$OLD_WP"
+  assert_zim_unchanged "$WP_OLD"
   run download_log
   assert_line ' !!! DOWNLOAD FAILED !!!'
 }
 
 @test "F1: a short download with wget exit 0 keeps the old ZIM (size check without -c)" {
-  make_local_zim "$OLD_WP"
-  keep_copy "$OLD_WP"
-  export FAKE_WGET_SHORT=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
+  export FAKE_WGET_SHORT="$WP_NEW"
   run_updater -d "$ZIMS"
-  assert_zim_unchanged "$OLD_WP"
+  assert_zim_unchanged "$WP_OLD"
 }
 
 @test "F1: with no meta4 and a short download, the old ZIM is kept" {
-  make_local_zim "$OLD_WP"
-  keep_copy "$OLD_WP"
-  export FAKE_WGET_META_FAIL=1 FAKE_WGET_SHORT=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
+  export FAKE_WGET_META_FAIL=1 FAKE_WGET_SHORT="$WP_NEW"
   run_updater -d "$ZIMS"
-  assert_zim_unchanged "$OLD_WP"
+  assert_zim_unchanged "$WP_OLD"
 }
 
 @test "F2: a failure on the first ZIM does not mark the second one failed" {
-  make_local_zim "$OLD_WP"
-  make_local_zim "$OLD_WT"
-  export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  make_local_zim "$WT_OLD"
+  export FAKE_WGET_CORRUPT="$WP_NEW"
   run_updater -d -c "$ZIMS"
-  assert_exists "$ZIMS/$OLD_WP"
-  cmp "$ZIMS/$NEW_WT" "$(remote_file "$WT_REMOTE")"
-  refute_exists "$ZIMS/$OLD_WT"
+  assert_exists "$ZIMS/$WP_OLD"
+  cmp "$ZIMS/$WT_NEW" "$(remote_file "$WT_REMOTE")"
+  refute_exists "$ZIMS/$WT_OLD"
 }
 
 @test "F3: a checksum failure leaves no 0-byte ZIM behind" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
-  printf 'X' | dd of="$ZIMS/$NEW_WP" bs=1 seek=10 conv=notrunc status=none
-  export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  printf 'X' | dd of="$ZIMS/$WP_NEW" bs=1 seek=10 conv=notrunc status=none
+  export FAKE_WGET_CORRUPT="$WP_NEW"
   run_updater -f -d "$ZIMS"
   run find "$ZIMS" -type f -empty
   assert_output ''
 }
 
 @test "F4: -f in dry-run writes no .sha256 into the ZIM dir" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   local before
   before="$(zim_dir_snapshot)"
   run_updater -f "$ZIMS"
@@ -75,38 +68,38 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 }
 
 @test "F4: a failed meta4 fetch does not write an empty-hash .sha256" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   export FAKE_WGET_META_FAIL=1
   run_updater -d "$ZIMS"
   # Without metadata the download cannot be verified (F1), so no checksum may be written at all
-  refute_exists "$ZIMS/$NEW_WP.sha256"
-  assert_exists "$ZIMS/$OLD_WP"
+  refute_exists "$ZIMS/$WP_NEW.sha256"
+  assert_exists "$ZIMS/$WP_OLD"
 }
 
 @test "F4: -f -d with a failed meta4 fetch keeps a good cached .sha256" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
-  make_local_sha256 "$NEW_WP"
-  keep_copy "$NEW_WP.sha256"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
+  keep_copy "$WP_NEW.sha256"
   export FAKE_WGET_META_FAIL=1
   run_updater -f -d "$ZIMS"
-  assert_zim_unchanged "$NEW_WP.sha256"
+  assert_zim_unchanged "$WP_NEW.sha256"
 }
 
 @test "F5: a file named like the new ZIM in the CWD does not suppress the download" {
-  make_local_zim "$OLD_WP"
-  printf 'unrelated' >"$RUN_DIR/$NEW_WP"
+  make_local_zim "$WP_OLD"
+  printf 'unrelated' >"$RUN_DIR/$WP_NEW"
   run_updater -d "$ZIMS"
-  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$OLD_WP"
-  run cat "$RUN_DIR/$NEW_WP"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/$WP_OLD"
+  run cat "$RUN_DIR/$WP_NEW"
   assert_output 'unrelated'
 }
 
 @test "F5: with -t, a file named like the new ZIM in the CWD does not suppress the torrent" {
-  make_local_zim "$OLD_WP"
-  printf 'unrelated' >"$RUN_DIR/$NEW_WP"
+  make_local_zim "$WP_OLD"
+  printf 'unrelated' >"$RUN_DIR/$WP_NEW"
   run_updater -d -t "$ZIMS"
-  cmp "$ZIMS/$NEW_WP.torrent" "$(remote_file "$WP_REMOTE.torrent")"
+  cmp "$ZIMS/$WP_NEW.torrent" "$(remote_file "$WP_REMOTE.torrent")"
 }
 
 @test "F6: -f verifies an unmatched local ZIM against its own .sha256 in the ZIM dir" {
@@ -140,8 +133,8 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 }
 
 @test "H1: a failed download exits 1" {
-  make_local_zim "$OLD_WP"
-  export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
+  make_local_zim "$WP_OLD"
+  export FAKE_WGET_CORRUPT="$WP_NEW"
   run_updater -d -c "$ZIMS"
   assert_failure 1
 }
@@ -150,7 +143,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
   use_fixture_copy
   printf '<feed>\n  <updated>__NOW__</updated>\n</feed>\n' >"$FAKE_FIXTURES/catalog.xml"
   add_root_level_catalog_entry
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'Could not find any remote files'
@@ -159,14 +152,14 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 @test "H1: a catalog without ZIM URLs exits 1" {
   use_fixture_copy
   printf '<feed>\n  <updated>__NOW__</updated>\n</feed>\n' >"$FAKE_FIXTURES/catalog.xml"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'No ZIM URLs found'
 }
 
 @test "H2: -c together with -t aborts with exit 2" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -d -c -t "$ZIMS"
   assert_failure 2
   assert_output --partial 'Calculating Checksum not available with torrenting'
@@ -177,7 +170,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 @test "H3: self-update never moves download.log or kiwix-index into the script dir" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=other-branch
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'You appear to be on a different branch'
@@ -192,7 +185,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 @test "H3: an up-to-date self-update check keeps download.log and kiwix-index in the run dir" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=current
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'Version: Current'
@@ -203,7 +196,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 }
 
 @test "H4: a failed catalog fetch exits 1 and caches no kiwix-index" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   export FAKE_WGET_CATALOG_FAIL=1
   run_updater "$ZIMS"
   assert_failure 1
@@ -211,25 +204,25 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 }
 
 @test "H5: -n without a value exits 2" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS" -n
   assert_failure 2
 }
 
 @test "H5: -n with a garbage value exits 2" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -n banana "$ZIMS"
   assert_failure 2
 }
 
 @test "H5: -x with a garbage value exits 2" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -x 12parsecs "$ZIMS"
   assert_failure 2
 }
 
 @test "H5: an unknown --option exits 2 with usage" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS" --bogus
   assert_failure 2
   assert_output --partial 'Usage:'
@@ -237,20 +230,20 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 
 @test "H5: two positional arguments exit 2" {
   mkdir "$SANDBOX/other"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS" "$SANDBOX/other"
   assert_failure 2
 }
 
 @test "H5: an invalid -l country code warns on stderr" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater --separate-stderr -l nope "$ZIMS"
   assert_success
   [[ "${stderr,,}" == *"country code"* ]]
 }
 
 @test "H6: a second instance on the same ZIM dir exits 75" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   exec 8<"$ZIMS"
   flock -n 8
   run_updater "$ZIMS"
@@ -262,7 +255,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 
 @test "H7: a missing wget exits 1 with a clear message" {
   make_tooldir wget
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   PATH="$TOOLDIR" run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'wget'
@@ -273,7 +266,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 # M: medium
 
 @test "M2: clear is not called when stdout is not a terminal" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   refute_nonempty "$FAKE_CLEAR_LOG"
@@ -281,7 +274,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 
 @test "M3: the array-length mismatch message is printed in red" {
   add_root_level_catalog_entry
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_failure
   assert_output --partial $'\033[0;31mParsed array lengths did not match'
@@ -292,16 +285,16 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 
 @test "N1: with GNU Wget2 the meta4 is read as metadata, not followed" {
   export FAKE_WGET_FLAVOR=wget2
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -d -c "$ZIMS"
   assert_success
   assert_output --partial 'Download (mirror) : https://mirror.kiwix.test/'
-  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$OLD_WP"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/$WP_OLD"
 }
 
 @test "N2: -f -d never deletes an unmatched ZIM that has a valid own checksum" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   make_local_zim zzz_orphan_test_2025-01.zim "$(head -c 2048 < <(yes 'orphan payload'))"
   make_local_sha256 zzz_orphan_test_2025-01.zim
   keep_copy "zzz_orphan_test_2025-01.zim"
@@ -327,48 +320,48 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 }
 
 @test "N3: -f -d with a failed meta4 fetch never deletes a good ZIM" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
-  make_local_sha256 "$NEW_WP"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
+  make_local_sha256 "$WP_NEW"
   export FAKE_WGET_META_FAIL=1
   run_updater -f -d "$ZIMS"
-  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
   # Since R9 the cached .sha256 is used when the metadata is unavailable
   assert_output --partial 'verifying against the cached checksum'
   assert_output --partial 'Checksum passed'
 }
 
 @test "N3: -f -d with a failed meta4 fetch and no cached checksum keeps the ZIM and reports it" {
-  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   export FAKE_WGET_META_FAIL=1
   run_updater -f -d "$ZIMS"
   assert_failure 1
-  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  assert_output --partial "cannot verify $NEW_WP"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  assert_output --partial "cannot verify $WP_NEW"
   refute_output --partial 'Checksum passed'
 }
 
 @test "N4: -S stops new .sha256 files from being written" {
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -d -S "$ZIMS"
   assert_success
-  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$NEW_WP.sha256"
+  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
+  refute_exists "$ZIMS/$WP_NEW.sha256"
 }
 
 @test "N5: -f checks an outdated ZIM against its own online checksum, not the new release's" {
   use_fixture_copy
-  make_local_zim "$OLD_WP"
-  keep_copy "$OLD_WP"
+  make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
   # The older release's checksum is still published next to the new one.
-  (cd "$ZIMS" && sha256sum "$OLD_WP") >"$(remote_file "zim/wikipedia/$OLD_WP.sha256")"
+  (cd "$ZIMS" && sha256sum "$WP_OLD") >"$(remote_file "zim/wikipedia/$WP_OLD.sha256")"
   run_updater -f -d "$ZIMS"
-  assert_zim_unchanged "$OLD_WP"
+  assert_zim_unchanged "$WP_OLD"
   refute_output --partial 'removing corrupt file'
 }
 
 @test "N1: with GNU Wget2 every meta4 request carries --no-metalink" {
   export FAKE_WGET_FLAVOR=wget2
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   grep -qF '.meta4' "$FAKE_WGET_LOG"
@@ -378,7 +371,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 
 @test "N1: with wget 1.x no meta4 request carries --no-metalink" {
   export FAKE_WGET_FLAVOR=wget1
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   grep -qF '.meta4' "$FAKE_WGET_LOG"
@@ -388,23 +381,23 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 
 @test "N5: -f reports a corrupt outdated ZIM against its own online checksum and keeps it" {
   use_fixture_copy
-  make_local_zim "$OLD_WP"
-  (cd "$ZIMS" && sha256sum "$OLD_WP") >"$(remote_file "zim/wikipedia/$OLD_WP.sha256")"
-  printf 'tampered' >>"$ZIMS/$OLD_WP"
-  keep_copy "$OLD_WP"
+  make_local_zim "$WP_OLD"
+  (cd "$ZIMS" && sha256sum "$WP_OLD") >"$(remote_file "zim/wikipedia/$WP_OLD.sha256")"
+  printf 'tampered' >>"$ZIMS/$WP_OLD"
+  keep_copy "$WP_OLD"
   run_updater -f -d "$ZIMS"
   assert_output --partial 'a normal update run (without -f) will replace it'
-  assert_zim_unchanged "$OLD_WP"
+  assert_zim_unchanged "$WP_OLD"
   run wget_downloads
   assert_output ''
 }
 
 @test "N5: -f -d stores the outdated ZIM's own online checksum for offline use" {
   use_fixture_copy
-  make_local_zim "$OLD_WP"
-  (cd "$ZIMS" && sha256sum "$OLD_WP") >"$(remote_file "zim/wikipedia/$OLD_WP.sha256")"
+  make_local_zim "$WP_OLD"
+  (cd "$ZIMS" && sha256sum "$WP_OLD") >"$(remote_file "zim/wikipedia/$WP_OLD.sha256")"
   run_updater -f -d "$ZIMS"
   assert_output --partial 'Checksum passed'
-  run cat "$ZIMS/$OLD_WP.sha256"
-  assert_output "$(cut -d' ' -f1 "$(remote_file "zim/wikipedia/$OLD_WP.sha256")") $OLD_WP"
+  run cat "$ZIMS/$WP_OLD.sha256"
+  assert_output "$(cut -d' ' -f1 "$(remote_file "zim/wikipedia/$WP_OLD.sha256")") $WP_OLD"
 }

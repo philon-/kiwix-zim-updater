@@ -8,42 +8,38 @@ setup() {
   LIB="$ZIMS/library.xml"
 }
 
-W=wikipedia_en_test_2026-01.zim
-WOLD=wikipedia_en_test_2025-01.zim
-WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
-
 # Paths listed in the library, one per line, sorted
 listed() {
   grep -o 'path="[^"]*"' "$LIB" | sed 's/^path="//; s/"$//' | LC_ALL=C sort
 }
 
 @test "library: an update lists the new ZIM, not the purged one, and never a .part file" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   assert_output --partial "Library: $LIB now lists 1 ZIM(s)"
   run listed
-  assert_output "$W"
+  assert_output "$WP_NEW"
 }
 
 @test "library: the new ZIM is listed before the old one is purged" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   # The new ZIM was added to the library at a moment when the old one still existed
-  run grep -E "^$W:.* $WOLD( |\$)" "$FAKE_KIWIX_MANAGE_SEEN"
+  run grep -E "^$WP_NEW:.* $WP_OLD( |\$)" "$FAKE_KIWIX_MANAGE_SEEN"
   assert_success
 }
 
 @test "library: paths are relative to the library file, so other containers can mount it elsewhere" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d --library "$LIB" "$ZIMS"
   run grep -c 'path="/' "$LIB"
   assert_output '0'
 }
 
 @test "library: the file is rewritten in place (kiwix-serve 3.8 loses a renamed file)" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   printf '<library version="20110515">\n</library>\n' >"$LIB"
   local inode
   inode="$(stat -c %i "$LIB")"
@@ -51,13 +47,13 @@ listed() {
   assert_success
   assert_equal "$(stat -c %i "$LIB")" "$inode"
   run listed
-  assert_output "$W"
+  assert_output "$WP_NEW"
   run ls "$ZIMS"
   refute_output --partial '.tmp.'
 }
 
 @test "library: an unchanged library is not written again" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   sleep 3 # let the delayed touch of the first write happen
@@ -71,7 +67,7 @@ listed() {
 }
 
 @test "library: a changed library is touched again shortly after it was written" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   local first
@@ -81,7 +77,7 @@ listed() {
 }
 
 @test "library: the delayed touch does not keep the ZIM directory locked" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   run_updater -d --library "$LIB" "$ZIMS"
@@ -90,7 +86,7 @@ listed() {
 }
 
 @test "library: a dry-run creates and changes nothing" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater --library "$LIB" "$ZIMS"
   assert_success
   refute_exists "$LIB"
@@ -98,13 +94,13 @@ listed() {
 }
 
 @test "library: an unreadable ZIM is reported and left out, the others are listed" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   make_local_zim orphan_test_2025-01.zim 'BADZIM not really a ZIM'
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   assert_output --partial 'orphan_test_2025-01.zim could not be read by kiwix-manage and is left out'
   run listed
-  assert_output "$W"
+  assert_output "$WP_NEW"
 }
 
 @test "library: when no ZIM can be read the existing library is kept and the run exits 1" {
@@ -118,26 +114,26 @@ listed() {
 }
 
 @test "library: a ZIM behind an old-style lock is an unfinished download and not listed" {
-  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   make_local_zim small_test_2025-01.zim
   touch "$ZIMS/.~lock.small_test_2025-01.zim"
   export FAKE_WGET_NETFAIL=small_test
   run_updater -d --library "$LIB" "$ZIMS"
   run listed
-  assert_output "$W"
+  assert_output "$WP_NEW"
 }
 
 @test "library: a failed download leaves the library listing the old ZIM" {
-  make_local_zim "$WOLD"
-  export FAKE_WGET_FAIL="$W"
+  make_local_zim "$WP_OLD"
+  export FAKE_WGET_FAIL="$WP_NEW"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_failure 1
   run listed
-  assert_output "$WOLD"
+  assert_output "$WP_OLD"
 }
 
 @test "library: an internet outage leaves the library untouched" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d --library "$LIB" "$ZIMS"
   sleep 3
   cp "$LIB" "$SANDBOX/lib.orig"
@@ -151,16 +147,16 @@ listed() {
 }
 
 @test "library: a relative --library path is resolved against the current directory" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d --library lib.xml "$ZIMS"
   assert_success
   assert_exists "$RUN_DIR/lib.xml"
   run grep -o 'path="[^"]*"' "$RUN_DIR/lib.xml"
-  assert_output "path=\"../zims/$W\""
+  assert_output "path=\"../zims/$WP_NEW\""
 }
 
 @test "library: --library needs a value" {
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   run_updater -d "$ZIMS" --library
   assert_failure 2
   run_updater -d --library -c "$ZIMS"
@@ -169,7 +165,7 @@ listed() {
 
 @test "library: kiwix-manage is only required with --library" {
   make_tooldir kiwix-manage
-  make_local_zim "$WOLD"
+  make_local_zim "$WP_OLD"
   PATH="$TOOLDIR" run_updater "$ZIMS"
   assert_success
   PATH="$TOOLDIR" run_updater --library "$LIB" "$ZIMS"
