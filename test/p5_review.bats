@@ -198,7 +198,7 @@ keep_copy() {
   printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
   run_updater -f -p "$ZIMS"
   assert_failure 1
-  assert_output --partial 'Checksum failed but purge was skipped'
+  assert_output --partial 'Checksum failed but purge skipped'
   refute_output --partial 'removing corrupt file'
 }
 

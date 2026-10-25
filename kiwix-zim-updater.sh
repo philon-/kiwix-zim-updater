@@ -710,6 +710,24 @@ write_checksum_file() {
   echo "$2 $1" >"$ZIMPath$1.sha256.tmp" && mv -f "$ZIMPath$1.sha256.tmp" "$ZIMPath$1.sha256"
 }
 
+# report_corrupt <reason> - Report a ZIM that -f found corrupt. Returns 1 when -p keeps it, so there is nothing to
+# download. Otherwise a replacement is downloaded into a .part file, and the corrupt ZIM stays until it is verified;
+# the dry-run keeps it too, which counts as a failed verification.
+report_corrupt() {
+  if [[ $SKIP_PURGE -eq 1 ]]; then
+    say "${RED_BOLD}" "    ✗ Status : ${SIMULATED}$1 but purge skipped"
+    AnyVerifyFailed=1
+    return 1
+  fi
+  if [[ $DEBUG -eq 1 ]]; then
+    say "${RED_BOLD}" "    ✗ Status : ${SIMULATED}$1, a replacement would be downloaded ($FilePath)"
+    AnyVerifyFailed=1
+  else
+    say "${RED_BOLD}" "    ✗ Status : $1, downloading a replacement"
+  fi
+  return 0
+}
+
 # download_file - Download (or resume) $2 into $1, showing progress and logging it. Returns wget's own exit status,
 # not tee's.
 download_file() {
@@ -1120,27 +1138,11 @@ main() {
           { [[ $Action -eq $ACT_UPDATE ]] || [[ $Action -eq $ACT_VERIFY_ONLINE ]]; } && write_checksum_file "$OldZIM" "$ExpectedHash"
           # An unknown expected size (failed meta4 fetch) is "cannot verify", never "corrupt"
           if [[ $Action -eq $ACT_UPDATE ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
-            RequiresDownload=1
-            if [[ $DEBUG -eq 0 ]]; then
-              if [[ $SKIP_PURGE -eq 0 ]]; then
-                # The corrupt file stays until its replacement is verified (it is downloaded into a .part file)
-                say "${RED_BOLD}" "    ✗ Status : File size verification failed, downloading a replacement"
-              else
-                say "${RED_BOLD}" "    ✗ Status : File size verification failed but purge skipped"
-                AnyVerifyFailed=1
-              fi
-            else
-              [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** File size verification failed, a replacement would be downloaded ($FilePath)${CLEAR}"
-              [[ $SKIP_PURGE -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** File size verification failed but purge skipped ($FilePath)${CLEAR}"
-              # The dry-run keeps the corrupt file: that is a failed verification, like any corrupt ZIM that is kept
-              AnyVerifyFailed=1
-            fi
-            # With -p the corrupt file stays where it is, so there is nothing to download into its place
-            if [[ $SKIP_PURGE -eq 1 ]]; then
+            if ! report_corrupt "File size verification failed"; then
               echo
               continue
             fi
-
+            RequiresDownload=1
             echo
           elif [[ ${#ExpectedHash} -ne 64 ]]; then
             echo -e "${YELLOW_BOLD}    No valid checksum available (metadata unavailable?), cannot verify $OldZIM. Skipping, file kept.${CLEAR}" && echo "Cannot verify $OldZIM: no valid checksum available, file kept" >>"$LOG_FILE"
@@ -1167,23 +1169,10 @@ main() {
               echo
               continue
             fi
-            if [[ $DEBUG -eq 0 ]]; then
-              if [[ $SKIP_PURGE -eq 0 ]]; then
-                # The corrupt file stays until its replacement is verified (it is downloaded into a .part file)
-                say "${RED_BOLD}" "    ✗ Status : Checksum failed, downloading a replacement"
-              else
-                say "${RED_BOLD}" "    ✗ Status : Checksum failed but purge was skipped"
-                AnyVerifyFailed=1
-                echo
-                continue
-              fi
-            else
-              [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** Checksum failed, a replacement would be downloaded ($FilePath)${CLEAR}"
-              [[ $SKIP_PURGE -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** Checksum failed but purge was skipped ($FilePath)${CLEAR}"
-              # The dry-run keeps the corrupt file: that is a failed verification, like any corrupt ZIM that is kept
-              AnyVerifyFailed=1
+            if ! report_corrupt "Checksum failed"; then
+              echo
+              continue
             fi
-
             RequiresDownload=1
             echo
           else
