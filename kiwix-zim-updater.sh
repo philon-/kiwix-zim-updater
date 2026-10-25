@@ -672,6 +672,13 @@ if [ $AnyDownloads -eq 1 ]; then
   for ((z = 0; z < ${#LocalZIMNameArray[@]}; z++)); do # Iterate through the download queue.
     [[ ${LocalRequiresDownloadArray[$z]} -eq 0 ]] && continue
 
+    # Per-file state: nothing may carry over from the previous ZIM (or leak in from the environment)
+    DownloadFailed=0
+    IsMirror=0
+    DownloadURL=""
+    ExpectedSize=""
+    ExpectedHash=""
+
     OldZIM=${LocalZIMNameArray[$z]}
     OldZIMPath=$ZIMPath$OldZIM
 

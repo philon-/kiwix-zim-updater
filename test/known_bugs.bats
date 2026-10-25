@@ -54,7 +54,6 @@ keep_copy() {
 }
 
 @test "F2: a failure on the first ZIM does not mark the second one failed" {
-  skip "F2: DownloadFailed is never reset; the good second download is deleted as abandoned"
   make_local_zim "$OLD_WP"
   make_local_zim "$OLD_WT"
   export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
