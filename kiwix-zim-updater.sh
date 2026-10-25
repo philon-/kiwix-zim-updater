@@ -139,10 +139,10 @@ master_scrape() {
 
   if [[ -z "$BaseURL" ]]; then
     echo -e "${RED_REGULAR}  ✗ No ZIM URLs found. Exiting...${CLEAR}"
-    exit 0
+    exit 1
   elif [[ $FoundURLs -ne 1 ]]; then
     echo -e "${RED_REGULAR}  ✗ Too many zim base urls found. Please open an issue on github. Exiting...${CLEAR}"
-    exit 0
+    exit 1
   else
     BaseURL="$BaseURL/zim/"
     echo -e "${GREEN_REGULAR}    ✓ Using $BaseURL as base download directory for metadata"
@@ -162,7 +162,7 @@ master_scrape() {
   if [[ ${#RemoteFiles[@]} -eq 0 ]]; then
     echo -e "${RED_REGULAR}    ✗  Could not find any remote files, exiting${CLEAR}"
     echo "✗  Could not find any remote files, exiting" >> "$LOG_FILE"
-    exit 0
+    exit 1
   else
     echo -e "${GREEN_BOLD}    ✓ Found ${#RemoteFiles[@]} files online"
     echo "✓ Found ${#RemoteFiles[@]} files online" >> "$LOG_FILE"
@@ -368,7 +368,7 @@ flags() {
   # Check that ZIM(s) were actually found/loaded.
   if [ ${#LocalZIMArray[@]} -eq 0 ]; then # No ZIM(s) were found in the directory... I guess there's nothing else for us to do, so we'll Exit.
     echo -e "${RED_REGULAR}  ✗ No ZIMs found. Exiting...${CLEAR}"
-    exit 0
+    exit 1
   else
     echo -e "${GREEN_BOLD}  ✓ Valid ZIM Directory ${CLEAR}"
   fi
@@ -595,6 +595,8 @@ echo "3. Processing ZIM(s)..." >> "$LOG_FILE"
 echo
 
 AnyDownloads=0
+# Set once any download of the run failed: the other ZIMs are still processed, but the script exits 1
+AnyDownloadFailed=0
 
 for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
   RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
@@ -893,6 +895,7 @@ if [ $AnyDownloads -eq 1 ]; then
         fi
 
         if [[ $DownloadFailed -eq 1 ]]; then
+          AnyDownloadFailed=1
           # wget leaves a partial or empty .torrent behind, which would be mistaken for a finished one next run
           rm -f "$FilePath"
           echo -e "${RED_BOLD}    ✗ Status : Torrent download failed${CLEAR}"
@@ -965,6 +968,7 @@ if [ $AnyDownloads -eq 1 ]; then
 
     echo >> "$LOG_FILE"
     [[ $DownloadFailed -eq 1 ]] && echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
+    [[ $DownloadFailed -eq 1 ]] && AnyDownloadFailed=1
 
     # in all of these cases, we will not re-purge and will leave the lockfile so we know to resume later
     if [[ $DownloadFailed -eq 1 ]] || [[ $SKIP_PURGE -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 1 ]]; then
@@ -1060,3 +1064,10 @@ if [[ "$CALLEDSCRIPTFILE" == "kiwix-zim.sh" ]]; then
   echo "WARNING: kiwix-zim has been deprecated in favor of kiwix-zim-updater. kiwix-zim will be a hard link to the new script name until at least 2025-01-01.\n This exit code is nonzero, but the script has not errored out. This is simply so you may notice and switch to using kiwix-zim-updater " >> "$LOG_FILE"
   exit 2
 fi
+
+if [[ $AnyDownloadFailed -eq 1 ]]; then
+  echo -e "${RED_BOLD}✗ One or more downloads failed, see $LOG_FILE${CLEAR}"
+  echo "✗ One or more downloads failed" >> "$LOG_FILE"
+  exit 1
+fi
+exit 0

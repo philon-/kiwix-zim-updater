@@ -142,14 +142,12 @@ keep_copy() {
 }
 
 @test "H1: an empty ZIM directory exits 1" {
-  skip "H1: 'No ZIMs found' exits 0"
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'No ZIMs found'
 }
 
 @test "H1: a failed download exits 1" {
-  skip "H1: a failed download exits 0"
   make_local_zim "$OLD_WP"
   export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
   run_updater -d -c "$ZIMS"
@@ -157,7 +155,6 @@ keep_copy() {
 }
 
 @test "H1: a catalog without remote files exits 1" {
-  skip "H1: 'Could not find any remote files' exits 0"
   use_fixture_copy
   cat >"$FAKE_FIXTURES/catalog.xml" <<'EOF'
 <feed>
@@ -174,7 +171,6 @@ EOF
 }
 
 @test "H1: a catalog without ZIM URLs exits 1" {
-  skip "H1: 'No ZIM URLs found' exits 0"
   use_fixture_copy
   printf '<feed>\n  <updated>__NOW__</updated>\n</feed>\n' >"$FAKE_FIXTURES/catalog.xml"
   make_local_zim "$OLD_WP"
