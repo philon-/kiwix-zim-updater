@@ -130,14 +130,12 @@ keep_copy() {
 # H: correctness and operations
 
 @test "H1: a nonexistent ZIM directory exits 2" {
-  skip "H1: usage errors exit 0"
   run_updater "$SANDBOX/does-not-exist"
   assert_failure 2
   assert_output --partial 'is not a directory'
 }
 
 @test "H1: a missing ZIM directory argument exits 2" {
-  skip "H1: usage errors exit 0"
   run_updater
   assert_failure 2
   assert_output --partial 'Kiwix ZIM Directory not provided'

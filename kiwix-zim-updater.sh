@@ -230,8 +230,10 @@ self_update() {
   echo
 }
 
-# usage_example - Show Usage and Exit
+# usage_example [<exit code>] - Show Usage and Exit (default 0). On a usage error the text goes to stderr.
 usage_example() {
+  local status="${1:-0}"
+  [[ "$status" -ne 0 ]] && exec 1>&2 # we exit below, so redirecting the rest of the script is harmless
   echo 'Usage: ./kiwix-zim-updater.sh <options> /full/path/'
   echo ''
   echo '    /full/path/                Full path to ZIM directory'
@@ -262,7 +264,7 @@ usage_example() {
   echo '                               *** Caution ***'
 
   echo
-  exit 0
+  exit "$status"
 }
 
 # flags - Flag and ZIM Processing Functions
@@ -293,7 +295,7 @@ flags() {
       echo "✗ '$1' is not a directory" >> "$LOG_FILE"
     fi
     echo
-    usage_example
+    usage_example 2
   fi
 
   # Check for and add if missing, trailing slash.
@@ -475,7 +477,7 @@ mirror_search() {
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h | --help)
-      usage_example
+      usage_example 0
       ;;
     -d | --disable-dry-run)
       DEBUG=0
