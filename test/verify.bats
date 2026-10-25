@@ -27,7 +27,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   # Same size, one byte different.
   printf 'X' | dd of="$ZIMS/$CUR_WP" bs=1 seek=10 conv=notrunc status=none
   run_updater -f "$ZIMS"
-  assert_success
+  # The corrupt file stays (dry-run), so the verification failed: exit 1 (R7)
+  assert_failure 1
   assert_output --partial '*** Simulated *** Checksum failed, removing corrupt file'
   [[ -f "$ZIMS/$CUR_WP" ]]
   run wget_downloads
@@ -37,7 +38,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 @test "verify: -f reports a truncated current ZIM as a size failure (dry-run)" {
   head -c 100 "$(remote_file "$WP_REMOTE")" >"$ZIMS/$CUR_WP"
   run_updater -f "$ZIMS"
-  assert_success
+  # The truncated file stays (dry-run), so the verification failed: exit 1 (R7)
+  assert_failure 1
   assert_output --partial '*** Simulated *** File size verification failed, removing corrupt file'
   [[ -f "$ZIMS/$CUR_WP" ]]
 }

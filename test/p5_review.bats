@@ -172,3 +172,19 @@ keep_copy() {
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
   [[ ! -e "$ZIMS/.~lock.$W" ]]
 }
+
+@test "R7: dry-run -f exits 1 for a truncated current ZIM, like for a corrupt outdated one" {
+  make_local_zim "$W" "truncated"
+  run_updater -f "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'File size verification failed'
+}
+
+@test "R7: dry-run -f -p says the purge would be skipped, not that it removes the file" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
+  run_updater -f -p "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'Checksum failed but purge was skipped'
+  refute_output --partial 'removing corrupt file'
+}

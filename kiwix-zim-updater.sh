@@ -955,6 +955,8 @@ main() {
             else
               [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** File size verification failed, removing corrupt file ($FilePath)${CLEAR}"
               [[ $SKIP_PURGE -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** File size verification failed but purge skipped ($FilePath)${CLEAR}"
+              # The dry-run keeps the corrupt file: that is a failed verification, like any corrupt ZIM that is kept
+              AnyVerifyFailed=1
             fi
 
             echo
@@ -990,7 +992,10 @@ main() {
                 continue
               fi
             else
-              echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** Checksum failed, removing corrupt file ($FilePath)${CLEAR}"
+              [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** Checksum failed, removing corrupt file ($FilePath)${CLEAR}"
+              [[ $SKIP_PURGE -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** Checksum failed but purge was skipped ($FilePath)${CLEAR}"
+              # The dry-run keeps the corrupt file: that is a failed verification, like any corrupt ZIM that is kept
+              AnyVerifyFailed=1
             fi
 
             RequiresDownload=1
