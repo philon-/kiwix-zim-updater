@@ -562,6 +562,8 @@ write_checksum_file() {
   [[ $DEBUG -eq 0 ]] || return 0
   [[ $CHECKSUM_FILES -eq 1 ]] || return 0
   [[ "$2" =~ ^[0-9a-f]{64}$ ]] || return 0
+  # Leave an existing checksum file alone when it already holds this hash
+  [[ -f "$ZIMPath$1.sha256" ]] && [[ "$(grep -ioP "^[0-9a-f]{64}" <"$ZIMPath$1.sha256")" == "$2" ]] && return 0
   echo "$2 $1" >"$ZIMPath$1.sha256.tmp" && mv -f "$ZIMPath$1.sha256.tmp" "$ZIMPath$1.sha256"
 }
 
@@ -881,6 +883,13 @@ main() {
         NewZIMPath="$OldZIMPath"
       else
         mirror_search # Let's look for a mirror URL first.
+
+        # -f without metadata (offline, or the meta4 fetch failed): fall back to the checksum stored on an earlier run
+        if [[ $VERIFY_LIBRARY -eq 1 ]] && ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]] && [[ -f "$OldZIMPath.sha256" ]]; then
+          ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
+          echo -e "${YELLOW_REGULAR}    Metadata unavailable, verifying against the cached checksum${CLEAR}"
+          echo "Metadata unavailable for $OldZIM, verifying against the cached checksum" >>"$LOG_FILE"
+        fi
 
         NewZIM=${RemoteFiles[${LocalZIMRemoteIndexArray[$z]}]}
         NewZIMPath=$ZIMPath$NewZIM

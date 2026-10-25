@@ -357,6 +357,17 @@ EOF
   export FAKE_WGET_META_FAIL=1
   run_updater -f -d "$ZIMS"
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
+  # Since R9 the cached .sha256 is used when the metadata is unavailable
+  assert_output --partial 'verifying against the cached checksum'
+  assert_output --partial 'Checksum passed'
+}
+
+@test "N3: -f -d with a failed meta4 fetch and no cached checksum keeps the ZIM and reports it" {
+  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
+  export FAKE_WGET_META_FAIL=1
+  run_updater -f -d "$ZIMS"
+  assert_failure 1
+  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
   assert_output --partial "cannot verify $NEW_WP"
   refute_output --partial 'Checksum passed'
 }

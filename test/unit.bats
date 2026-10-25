@@ -291,3 +291,14 @@ assert_fixture_arrays() {
   run zim_date wiktionary_fr_test_2026-02A.Zim
   assert_output '2026-02a'
 }
+
+@test "write_checksum_file leaves an existing file with the same hash untouched" {
+  source "$SCRIPT_COPY"
+  ZIMPath="$ZIMS/"
+  DEBUG=0
+  printf 'payload' >"$ZIMS/a_2026-01.zim"
+  (cd "$ZIMS" && sha256sum a_2026-01.zim >a_2026-01.zim.sha256)
+  cp "$ZIMS/a_2026-01.zim.sha256" "$SANDBOX/orig"
+  write_checksum_file a_2026-01.zim "$(cut -d' ' -f1 "$SANDBOX/orig")"
+  cmp "$ZIMS/a_2026-01.zim.sha256" "$SANDBOX/orig"
+}

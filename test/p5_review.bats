@@ -188,3 +188,26 @@ keep_copy() {
   assert_output --partial 'Checksum failed but purge was skipped'
   refute_output --partial 'removing corrupt file'
 }
+
+@test "R9: -f verifies a current ZIM offline against its cached checksum" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_sha256 "$W"
+  # Run once online so the catalog index is cached, then go "offline"
+  run_updater -f "$ZIMS"
+  assert_success
+  export FAKE_WGET_META_FAIL=1 FAKE_WGET_CATALOG_FAIL=1
+  run_updater -f "$ZIMS"
+  assert_success
+  assert_output --partial 'verifying against the cached checksum'
+  assert_output --partial 'Checksum passed'
+}
+
+@test "R9: offline -f still detects a corrupt current ZIM through its cached checksum" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_sha256 "$W"
+  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
+  export FAKE_WGET_META_FAIL=1
+  run_updater -f "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'Checksum failed'
+}
