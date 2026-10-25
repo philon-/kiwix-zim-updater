@@ -102,7 +102,6 @@ keep_copy() {
 }
 
 @test "F5: a file named like the new ZIM in the CWD does not suppress the download" {
-  skip "F5: '[[ -f \$NewZIM ]]' is resolved against the CWD instead of the ZIM dir"
   make_local_zim "$OLD_WP"
   printf 'unrelated' >"$RUN_DIR/$NEW_WP"
   run_updater -d "$ZIMS"
@@ -113,7 +112,6 @@ keep_copy() {
 }
 
 @test "F5: with -t, a file named like the new ZIM in the CWD does not suppress the torrent" {
-  skip "F5: '[[ -f \$NewZIM ]]' is resolved against the CWD instead of the ZIM dir"
   make_local_zim "$OLD_WP"
   printf 'unrelated' >"$RUN_DIR/$NEW_WP"
   run_updater -d -t "$ZIMS"

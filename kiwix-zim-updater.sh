@@ -722,7 +722,7 @@ if [ $AnyDownloads -eq 1 ]; then
 
     if [ $VERIFY_LIBRARY -eq 0 ]; then
       if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
-        if [[ -f $NewZIM ]]; then
+        if [[ -f "$NewZIMPath" ]]; then
           [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : ZIM already exists on disk. Skipping download.${CLEAR}"
           [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  ZIM already exists on disk. Skipping download.${CLEAR}"
           echo
@@ -735,7 +735,7 @@ if [ $AnyDownloads -eq 1 ]; then
           [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  Torrent doesn't exist on disk. Downloading...${CLEAR}"
           RequiresDownload=1
         fi
-      elif [[ -f $NewZIM ]] && ! [[ -f $LockFilePath ]]; then # New ZIM already found, and no interruptions, we don't need to download it.
+      elif [[ -f "$NewZIMPath" ]] && ! [[ -f "$LockFilePath" ]]; then # New ZIM already found, and no interruptions, we don't need to download it.
         [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : ZIM already exists on disk. Skipping download.${CLEAR}"
         [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  ZIM already exists on disk. Skipping download.${CLEAR}"
         echo
