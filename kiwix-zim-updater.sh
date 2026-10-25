@@ -403,9 +403,7 @@ flags() {
     myBasename=$(echo "${LocalZIMArray[$index]}" | grep -ioP "^.*(?=_$COMPLETE_ENDING_REGEX$)")
 
     # Sorting cannot reliably sort the month string so we need to check it to be sure
-    MyDate="$(echo "${LocalZIMArray[$index]}" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)")"
-    MyYear="$(echo "$MyDate" | grep -oP "$YEAR_REGEX(?=-$MONTH_REGEX)")"
-    MyMonth="$(echo "$MyDate" | grep -oP "(?<=$YEAR_REGEX-)$MONTH_REGEX")"
+    MyDate="$(zim_date "${LocalZIMArray[$index]}")"
 
     for scanIndex in "${!LocalZIMArray[@]}"; do
       if [[ -f "${ZIMPath}.~lock.${LocalZIMArray[$index]}" ]]; then
@@ -421,17 +419,11 @@ flags() {
         elif [[ -f "${ZIMPath}${LocalZIMArray[$index]}.torrent" ]]; then
           echo "Disregarding ${LocalZIMArray[$index]} because new torrent exists ${LocalZIMArray[$scanIndex]}" >> "$LOG_FILE"
         else
-          ScanDate="$(echo "${LocalZIMArray[$scanIndex]}" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)")"
-          ScanYear="$(echo "$ScanDate" | grep -oP "$YEAR_REGEX(?=-$MONTH_REGEX)")"
-          ScanMonth="$(echo "$ScanDate" | grep -oP "(?<=$YEAR_REGEX-)$MONTH_REGEX")"
+          ScanDate="$(zim_date "${LocalZIMArray[$scanIndex]}")"
 
           # this file is not shadowed if it is newer.
           # this is caused by `ls -1` and `sort` having weird lexicons that make the prefix sort unreliable that 02a can sort between 01 and 02 instead of after 02
-          if [[ $MyYear > $ScanYear ]]; then
-            echo "Disregarding ${LocalZIMArray[$scanIndex]} because it is shadowed by ${LocalZIMArray[$index]}" >> "$LOG_FILE"
-            duplicated=2
-            break
-          elif [[ $MyYear == $ScanYear ]] && [[ $MyMonth > $ScanMonth ]]; then
+          if zim_is_newer "$MyDate" "$ScanDate"; then
             echo "Disregarding ${LocalZIMArray[$scanIndex]} because it is shadowed by ${LocalZIMArray[$index]}" >> "$LOG_FILE"
             duplicated=2
             break
@@ -535,6 +527,23 @@ acquire_zim_dir_lock() {
     echo "✗ Another instance is already running on '$ZIMPath'. Exiting..." >> "$LOG_FILE"
     exit 75
   fi
+}
+
+# zim_date <file name> - Print the YYYY-MM[a-z] release date at the end of a ZIM file name, nothing if it has none
+zim_date() {
+  echo "$1" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)"
+}
+
+# zim_is_newer <date> <other date> - True if the first YYYY-MM[a-z] date (as printed by zim_date) is newer than the
+# second. The year is compared first, then the month as a string, so 2026-02a is newer than 2026-02, which is newer
+# than 2026-01b. Equal dates are not newer, and an empty date is older than any other.
+zim_is_newer() {
+  local year month otherYear otherMonth
+  year="$(echo "$1" | grep -oP "$YEAR_REGEX(?=-$MONTH_REGEX)")"
+  month="$(echo "$1" | grep -oP "(?<=$YEAR_REGEX-)$MONTH_REGEX")"
+  otherYear="$(echo "$2" | grep -oP "$YEAR_REGEX(?=-$MONTH_REGEX)")"
+  otherMonth="$(echo "$2" | grep -oP "(?<=$YEAR_REGEX-)$MONTH_REGEX")"
+  [[ "$year" > "$otherYear" ]] || { [[ "$year" == "$otherYear" ]] && [[ "$month" > "$otherMonth" ]]; }
 }
 
 # hash_matches <name> <hash> - True if $ZIMPath<name> has the given sha256. Needs no .sha256 file on disk.
@@ -760,13 +769,8 @@ for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
 
   [[ -f "$ZIMPath$MatchingFileName.torrent" ]] && [[ ! -f "$ZIMPath$MatchingFileName" ]] && echo -e "${YELLOW_REGULAR}    Torrent already downloaded\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalRequiresDownloadArray+=(0) && continue
 
-  MatchedDate="$(echo "$MatchingFileName" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)")"
-  MatchedYear="$(echo "$MatchedDate" | grep -oP "$YEAR_REGEX(?=-$MONTH_REGEX)")"
-  MatchedMonth="$(echo "$MatchedDate" | grep -oP "(?<=$YEAR_REGEX-)$MONTH_REGEX")"
-
-  LocalDate="$(echo "$FileName" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)")"
-  LocalYear="$(echo "$LocalDate" | grep -oP "$YEAR_REGEX(?=-$MONTH_REGEX)")"
-  LocalMonth="$(echo "$LocalDate" | grep -oP "(?<=$YEAR_REGEX-)$MONTH_REGEX")"
+  MatchedDate="$(zim_date "$MatchingFileName")"
+  LocalDate="$(zim_date "$FileName")"
 
   FileTooSmall=0
   [[ $MIN_SIZE -gt 0 ]] && [[ $MatchingSize -lt $MIN_SIZE ]] && FileTooSmall=1
@@ -814,16 +818,13 @@ for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
     else
       if [ $FileTooSmall -eq 1 ]; then
         LocalRequiresDownloadArray+=(0)
-        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (minimum: $(numfmt --to=iec-i $MIN_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $(echo "$MatchingFileName" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)")${CLEAR}"
-        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (minimum: $(numfmt --to=iec-i $MIN_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $(echo "$MatchingFileName" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)")${CLEAR}"
+        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (minimum: $(numfmt --to=iec-i $MIN_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (minimum: $(numfmt --to=iec-i $MIN_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
       elif [ $FileTooLarge -eq 1 ]; then
         LocalRequiresDownloadArray+=(0)
-        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (maximum: $(numfmt --to=iec-i $MAX_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $(echo "$MatchingFileName" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)")${CLEAR}"
-        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (maximum: $(numfmt --to=iec-i $MAX_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $(echo "$MatchingFileName" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)")${CLEAR}"
-      elif [[ $MatchedYear < $LocalYear ]]; then
-        LocalRequiresDownloadArray+=(0)
-        echo "    ✗ No new update"
-      elif [[ "$MatchedYear" == "$LocalYear" ]] && { [[ $MatchedMonth < $LocalMonth ]] || [[ "$MatchedMonth" == "$LocalMonth" ]] ; }; then
+        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (maximum: $(numfmt --to=iec-i $MAX_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (maximum: $(numfmt --to=iec-i $MAX_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+      elif ! zim_is_newer "$MatchedDate" "$LocalDate"; then
         LocalRequiresDownloadArray+=(0)
         echo "    ✗ No new update"
       else
