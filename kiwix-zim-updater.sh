@@ -529,9 +529,11 @@ acquire_zim_dir_lock() {
   fi
 }
 
-# zim_date <file name> - Print the YYYY-MM[a-z] release date at the end of a ZIM file name, nothing if it has none
+# zim_date <file name> - Print the YYYY-MM[a-z] release date at the end of a ZIM file name, nothing if it has none.
+# The extension is matched case-insensitively like the ZIM listing (foo_2026-01.ZIM), and the date is printed in
+# lower case so it compares like the catalog's dates.
 zim_date() {
-  echo "$1" | grep -oP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)"
+  echo "$1" | grep -ioP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)" | tr '[:upper:]' '[:lower:]'
 }
 
 # zim_is_newer <date> <other date> - True if the first YYYY-MM[a-z] date (as printed by zim_date) is newer than the

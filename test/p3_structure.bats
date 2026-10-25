@@ -37,3 +37,13 @@ OLD_WP=wikipedia_en_test_2025-12.zim
   assert_success
   assert_output 'off'
 }
+
+@test "N9: a current ZIM with an upper-case .ZIM extension is not downloaded again" {
+  make_local_zim wikipedia_en_test_2026-01.ZIM --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
+  run_updater -d "$ZIMS"
+  assert_success
+  assert_output --partial 'No new update'
+  run wget_downloads
+  assert_output ''
+  [[ -f "$ZIMS/wikipedia_en_test_2026-01.ZIM" ]]
+}

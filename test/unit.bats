@@ -283,3 +283,11 @@ assert_fixture_arrays() {
   run cat "$LOG_FILE"
   assert_output --partial 'Missing required tool(s): numfmt. Exiting...'
 }
+
+@test "N9: zim_date reads the date of a ZIM with an upper-case extension" {
+  source "$SCRIPT_COPY"
+  run zim_date wikipedia_en_test_2026-01.ZIM
+  assert_output '2026-01'
+  run zim_date wiktionary_fr_test_2026-02A.Zim
+  assert_output '2026-02a'
+}
