@@ -11,9 +11,13 @@
 # directory. SIGTERM and SIGINT are forwarded to the running updater and everything it started (wget), so an
 # interrupted download stays a .part file that the next run resumes.
 
-# The updater to run. Tests point this at a stub.
+# Defaults for the environment variables that have one; empty counts as unset. The other variables are read in
+# build_args. healthcheck.sh repeats the STATE_DIR default and the last-run file name: keep them in step. Tests point
+# KIWIX_ZIM_UPDATER, the updater to run, at a stub.
 KIWIX_ZIM_UPDATER="${KIWIX_ZIM_UPDATER:-/usr/local/bin/kiwix-zim-updater.sh}"
 STATE_DIR="${STATE_DIR:-/state}"
+ZIM_DIR="${ZIM_DIR:-/data}"
+RUN_INTERVAL="${RUN_INTERVAL:-24h}"
 STATUS_FILE="$STATE_DIR/last-run"
 
 child_pid=""   # the running updater, if any
@@ -35,22 +39,16 @@ usage_error() {
   exit 2
 }
 
-# bool <variable name> <default> - Print 1 or 0 for a boolean environment variable. Empty means the default.
-bool() {
+# read_bool <variable name> <default> - Print 1 or 0 for a boolean environment variable. Empty means the default; a
+# value that is not a boolean is a usage error.
+read_bool() {
   local value="${!1:-}"
   [[ -z "$value" ]] && value="$2"
   case "${value,,}" in
     true | 1 | yes) echo 1 ;;
     false | 0 | no) echo 0 ;;
-    *) return 1 ;;
+    *) usage_error "$1 must be one of true, false, 1, 0, yes or no, got '${!1}'" ;;
   esac
-}
-
-# read_bool <variable name> <default> - Like bool, but a value that is not a boolean is a usage error
-read_bool() {
-  local result
-  result="$(bool "$1" "$2")" || usage_error "$1 must be one of true, false, 1, 0, yes or no, got '${!1}'"
-  echo "$result"
 }
 
 # interval_seconds <interval> - Print RUN_INTERVAL in seconds: 0 for "once" or 0, otherwise <n>[smhd]. At most 12
@@ -82,14 +80,24 @@ refuse_self_update() {
 
 # build_args - Fill updater_args from the environment, or exit 2 on an invalid value
 build_args() {
-  local dry_run checksum verify skip_purge no_sha clean_partials force_index method extra=()
+  local dry_run checksum verify method spec name default option value extra=() options=()
+  # DRY_RUN, CHECKSUM, VERIFY_LIBRARY and DOWNLOAD_METHOD depend on each other: they are handled below
   dry_run="$(read_bool DRY_RUN true)" || exit 2
   checksum="$(read_bool CHECKSUM true)" || exit 2
   verify="$(read_bool VERIFY_LIBRARY false)" || exit 2
-  skip_purge="$(read_bool SKIP_PURGE false)" || exit 2
-  no_sha="$(read_bool NO_SHA false)" || exit 2
-  clean_partials="$(read_bool CLEAN_PARTIALS true)" || exit 2
-  force_index="$(read_bool FORCE_FETCH_INDEX false)" || exit 2
+
+  # Plain switches: <variable> <default> <option added when true>
+  for spec in "SKIP_PURGE false -p" "NO_SHA false -S" "CLEAN_PARTIALS true --clean-partials" \
+    "FORCE_FETCH_INDEX false -g"; do
+    read -r name default option <<<"$spec"
+    value="$(read_bool "$name" "$default")" || exit 2
+    [[ "$value" -eq 1 ]] && options+=("$option")
+  done
+  # Options with a value: <variable> <option added with the value when the variable is not empty>
+  for spec in "MIN_SIZE -n" "MAX_SIZE -x" "MIN_FREE_SPACE --min-free" "COUNTRY -l" "LIBRARY_XML --library"; do
+    read -r name option <<<"$spec"
+    [[ -n "${!name:-}" ]] && options+=("$option" "${!name}")
+  done
 
   method="${DOWNLOAD_METHOD:-web}"
   case "${method,,}" in
@@ -117,16 +125,7 @@ build_args() {
   fi
   [[ "$checksum" -eq 1 ]] && updater_args+=(-c)
   [[ "$verify" -eq 1 ]] && updater_args+=(-f)
-  [[ "$skip_purge" -eq 1 ]] && updater_args+=(-p)
-  [[ "$no_sha" -eq 1 ]] && updater_args+=(-S)
-  [[ "$clean_partials" -eq 1 ]] && updater_args+=(--clean-partials)
-  [[ "$force_index" -eq 1 ]] && updater_args+=(-g)
-  [[ -n "${MIN_SIZE:-}" ]] && updater_args+=(-n "$MIN_SIZE")
-  [[ -n "${MAX_SIZE:-}" ]] && updater_args+=(-x "$MAX_SIZE")
-  [[ -n "${MIN_FREE_SPACE:-}" ]] && updater_args+=(--min-free "$MIN_FREE_SPACE")
-  [[ -n "${COUNTRY:-}" ]] && updater_args+=(-l "$COUNTRY")
-  [[ -n "${LIBRARY_XML:-}" ]] && updater_args+=(--library "$LIBRARY_XML")
-  updater_args+=("${extra[@]}" "${ZIM_DIR:-/data}")
+  updater_args+=("${options[@]}" "${extra[@]}" "$ZIM_DIR")
 }
 
 # on_signal <signal> - Forward a stop request to the running updater (its whole process group, so wget and tee get
@@ -143,13 +142,13 @@ on_signal() {
 # run_updater <args...> - Run the updater in its own process group and wait for it, also across signals. Sets
 # run_status to its exit code.
 run_updater() {
+  local status
   setsid "$KIWIX_ZIM_UPDATER" "$@" &
   child_pid=$!
   # A signal that arrived while the updater was being started has not reached it yet
   [[ -n "$stop_signal" ]] && on_signal "$stop_signal"
   # wait returns early (with 128 + the signal number) when a trapped signal arrives: keep waiting until the updater
   # is really gone, then ask once more, because bash keeps the real exit code of a finished background process
-  local status
   while :; do
     wait "$child_pid"
     run_status=$?
@@ -192,7 +191,7 @@ main() {
   fi
 
   local interval run=0 status
-  interval="$(interval_seconds "${RUN_INTERVAL:-24h}")" ||
+  interval="$(interval_seconds "$RUN_INTERVAL")" ||
     usage_error "RUN_INTERVAL must be once, 0 or <number>[s|m|h|d] with at most 12 digits, got '$RUN_INTERVAL'"
   build_args
   if [[ ! -w "$STATE_DIR" ]]; then
@@ -217,7 +216,7 @@ main() {
     fi
     case "$status" in
       0) log "run $run finished: exit 0" ;;
-      75) log "run $run skipped: another instance is running on ${ZIM_DIR:-/data} (exit 75)" ;;
+      75) log "run $run skipped: another instance is running on $ZIM_DIR (exit 75)" ;;
       *) log "run $run failed: exit $status, see $STATE_DIR/download.log" ;;
     esac
 
@@ -225,7 +224,7 @@ main() {
       exit "$status"
     fi
 
-    log "next run in ${RUN_INTERVAL:-24h}"
+    log "next run in $RUN_INTERVAL"
     sleep "$interval" &
     sleep_pid=$!
     # A signal that arrived just before the sleep started has nothing to end yet
