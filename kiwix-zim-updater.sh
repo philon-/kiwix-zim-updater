@@ -618,6 +618,8 @@ AnyDownloads=0
 AnyDownloadFailed=0
 # Set once -f found a ZIM it could not verify, or a corrupt one it had to keep: the script exits 1
 AnyVerifyFailed=0
+# Locks of downloads that failed in this run: the cleanup keeps them (and the partial file), so the next run resumes
+ResumableLocks=()
 
 for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
   RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
@@ -995,6 +997,12 @@ if [ $AnyDownloads -eq 1 ]; then
     echo >> "$LOG_FILE"
     [[ $DownloadFailed -eq 1 ]] && echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
     [[ $DownloadFailed -eq 1 ]] && AnyDownloadFailed=1
+    # A partial download (shorter than expected) can be resumed with wget -c next run. A file that failed its
+    # checksum is already gone, and one that is too large cannot be resumed: leave those to the cleanup below.
+    if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ -f "$LockFilePath" ]] && [[ -f "$NewZIMPath" ]] && \
+      ! { [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -ge $ExpectedSize ]]; }; then
+      ResumableLocks+=("$LockFilePath")
+    fi
 
     # in all of these cases, we will not re-purge and will leave the lockfile so we know to resume later
     if [[ $DownloadFailed -eq 1 ]] || [[ $SKIP_PURGE -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 1 ]]; then
@@ -1063,6 +1071,12 @@ if [ $AnyDownloads -eq 1 ]; then
 
       for ((i = 0; i < ${#HangingFileLocks[@]}; i++)); do
         baseFileName=$(echo "${HangingFileLocks[$i]}" | grep -ioP "(?<=\.~lock\.).*$")
+        if [[ " ${ResumableLocks[*]} " == *" ${HangingFileLocks[$i]} "* ]]; then
+          echo -e "  ${YELLOW_BOLD}Keeping interrupted download for the next run to resume: $ZIMPath$baseFileName${CLEAR}"
+          echo "Keeping interrupted download for the next run to resume: $ZIMPath$baseFileName" >> "$LOG_FILE"
+          echo
+          continue
+        fi
         echo -e "  ${RED_BOLD}Found broken lock: ${HangingFileLocks[$i]}${CLEAR}"
         echo "Found broken lock: ${HangingFileLocks[$i]}" >> "$LOG_FILE"
         if [[ -f "$ZIMPath$baseFileName" ]]; then

@@ -200,12 +200,40 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 }
 
 @test "N7a: a failed download keeps its partial file and lock so the next run resumes it" {
-  skip "N7a: step 5 cleanup deletes the partial download and its lock in the same run"
   make_local_zim "$OLD_WP"
   export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
   run_updater -d "$ZIMS"
   assert_failure 1
   [[ -f "$ZIMS/.~lock.$NEW_WP" ]]
   [[ -s "$ZIMS/$NEW_WP" ]]
+  [[ -f "$ZIMS/$OLD_WP" ]]
+}
+
+@test "N7a: the next run resumes the interrupted download and completes the update" {
+  make_local_zim "$OLD_WP"
+  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
+  run_updater -d "$ZIMS"
+  assert_failure 1
+  unset FAKE_WGET_FAIL
+  : >"$FAKE_WGET_LOG"
+  run_updater -d "$ZIMS"
+  assert_success
+  assert_output --partial 'ZIM download was interrupted. Continuing...'
+  run wget_downloads
+  assert_output --partial ' -c '
+  cmp "$ZIMS/$NEW_WP" "$(remote_file zim/wikipedia/wikipedia_en_test_2026-01.zim)"
+  [[ ! -e "$ZIMS/$OLD_WP" ]]
+  [[ ! -e "$ZIMS/.~lock.$NEW_WP" ]]
+}
+
+@test "N7a: a download that is too large is not kept for resuming" {
+  use_fixture_copy
+  make_local_zim "$OLD_WP"
+  # Serve more bytes than the meta4 announces: wget -c can never fix that.
+  printf 'extra' >>"$(remote_file zim/wikipedia/wikipedia_en_test_2026-01.zim)"
+  run_updater -d "$ZIMS"
+  assert_failure 1
+  [[ ! -e "$ZIMS/.~lock.$NEW_WP" ]]
+  [[ ! -e "$ZIMS/$NEW_WP" ]]
   [[ -f "$ZIMS/$OLD_WP" ]]
 }
