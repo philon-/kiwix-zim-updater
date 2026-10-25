@@ -132,7 +132,6 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
 # N: new defects found while working on this file
 
 @test "N6c: a local ZIM whose name only ends in a catalog basename is not treated as that ZIM" {
-  skip "N6c: the local-name regex is not anchored, so 'my notes+wikipedia_en_test_2025-12.zim' matches wikipedia_en_test_ and is purged"
   make_local_zim 'my notes+wikipedia_en_test_2025-12.zim' 'my notes'
   run_updater -d "$ZIMS"
   assert_success

@@ -384,7 +384,7 @@ flags() {
 
   for ((i = 0; i < ${#LocalZIMArray[@]}; i++)); do                                             # Loop through local ZIM(s).
     LocalZIMNameArray[$i]=$(basename "${LocalZIMArray[$i]}")                                   # Extract file name.
-    filename=$(basename "${LocalZIMArray[$i]}" | grep -ioP "[\w:\/\-.]+(?=$COMPLETE_ENDING_REGEX$)") # Extract file name.
+    filename=$(basename "${LocalZIMArray[$i]}" | grep -ioP "^[\w:\/\-.]+(?=$COMPLETE_ENDING_REGEX$)") # Extract file name.
     #        IFS='_' read -ra fields <<< "${LocalZIMNameArray[$i]}"; unset IFS  # Break the filename into fields delimited by the underscore '_'
 
     # Search MasterZIMArray for the current local ZIM to discover the online Root (directory) for the URL
