@@ -222,7 +222,7 @@ assert_fixture_arrays() {
   scrape
   assert_fixture_arrays
   run cat "$SANDBOX/scrape.out"
-  assert_output --partial 'Found 4 files online'
+  assert_output --partial "Found $(catalog_zim_count) files online"
   run cat "$FAKE_WGET_LOG"
   assert_line --index 0 --partial 'opds.library.kiwix.org'
   refute_line --index 1 --regexp '.'

@@ -174,7 +174,7 @@ age_index() {
   : >"$FAKE_WGET_LOG"
   run_updater "$ZIMS"
   assert_success
-  assert_output --partial 'Found 4 files online'
+  assert_output --partial "Found $(catalog_zim_count) files online"
   run catalog_fetched
   assert_failure
   cmp "$RUN_DIR/$INDEX" "$SANDBOX/index.orig"
@@ -208,7 +208,7 @@ age_index() {
   run_updater "$ZIMS"
   assert_success
   catalog_fetched
-  assert_output --partial 'Found 4 files online'
+  assert_output --partial "Found $(catalog_zim_count) files online"
 }
 
 @test "H4: a failed -g refetch exits 1 and leaves the existing index untouched" {

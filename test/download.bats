@@ -46,9 +46,8 @@ setup() {
   (cd "$ZIMS" && sha256sum --status -c "$WP_NEW.sha256")
   run find "$ZIMS" -name '.~lock.*'
   assert_output ''
-  run wget_downloads
   # Downloads are staged in a .part file and renamed once verified
-  assert_output "--connect-timeout=30 --read-timeout=300 --tries=3 -q --show-progress --progress=bar:force -c -O $ZIMS/$WP_NEW.part https://mirror.kiwix.test/$WP_REMOTE"
+  assert_single_download "$ZIMS/$WP_NEW.part" "https://mirror.kiwix.test/$WP_REMOTE"
 }
 
 @test "download: -d updates several ZIMs in one run" {
@@ -149,8 +148,7 @@ setup() {
   assert_exists "$ZIMS/$WP_OLD"
   refute_exists "$ZIMS/$WP_NEW"
   refute_exists "$ZIMS/$WP_NEW.sha256"
-  run wget_downloads
-  assert_output "--connect-timeout=30 --read-timeout=300 --tries=3 -q --show-progress --progress=bar:force -c -O $ZIMS/$WP_NEW.torrent https://download.kiwix.test/$WP_REMOTE.torrent"
+  assert_single_download "$ZIMS/$WP_NEW.torrent" "https://download.kiwix.test/$WP_REMOTE.torrent"
 }
 
 @test "download: a second -t run sees the torrent and downloads nothing" {

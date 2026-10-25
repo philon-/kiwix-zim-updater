@@ -18,7 +18,8 @@ setup() {
 @test "cli: -v prints the version and exits 0" {
   run_updater -v
   assert_success
-  assert_output '3.5'
+  assert_output "$(grep -oP '^VER="\K[^"]+' "$SCRIPT_COPY")"
+  refute_output ''
 }
 
 @test "cli: default run is a dry-run and says so" {
@@ -62,12 +63,12 @@ setup() {
   run head -1 "$RUN_DIR/kiwix-index"
   assert_output --regexp '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$'
   run grep -c 'application/x-zim' "$RUN_DIR/kiwix-index"
-  assert_output '4'
+  assert_output "$(catalog_zim_count)"
 
   : >"$FAKE_WGET_LOG"
   run_updater "$ZIMS"
   assert_success
-  assert_output --partial 'Found 4 files online'
+  assert_output --partial "Found $(catalog_zim_count) files online"
   run grep -c opds "$FAKE_WGET_LOG"
   assert_output '0'
 }

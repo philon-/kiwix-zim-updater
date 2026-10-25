@@ -88,6 +88,11 @@ add_root_level_catalog_entry() {
   sed -i "s#</feed>#$entry\n</feed>#" "$FAKE_FIXTURES/catalog.xml"
 }
 
+# Number of ZIMs the served catalog lists.
+catalog_zim_count() {
+  grep -c 'application/x-zim' "$FAKE_FIXTURES/catalog.xml"
+}
+
 # Path of a remote fixture file, e.g. remote_file zim/other/small_test_2025-12.zim
 remote_file() {
   printf '%s/remote/%s\n' "$FAKE_FIXTURES" "$1"
@@ -133,6 +138,14 @@ zim_dir_snapshot() {
 # Lines of the wget log that write to a file (-O <target> with target != -).
 wget_downloads() {
   awk '{ for (i = 1; i < NF; i++) if ($i == "-O" && $(i + 1) != "-") { print; next } }' "$FAKE_WGET_LOG"
+}
+
+# assert_single_download <target> <url> - wget was asked for exactly one download, of <url> into <target>, with -c.
+# The network options in front of it are pinned once, in the network test.
+assert_single_download() {
+  run wget_downloads
+  # shellcheck disable=SC2154 # bats' run sets lines and output
+  [[ "${#lines[@]}" -eq 1 && "$output" == *" -c -O $1 $2" ]] || fail "expected one download '-c -O $1 $2', got: $output"
 }
 
 # The download log the script wrote in the run directory (empty if none).
