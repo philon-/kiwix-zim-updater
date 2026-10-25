@@ -45,8 +45,8 @@ services:
       CHECKSUM: "true"
 
       # Delete unfinished downloads (.part files) that no run can use any more, because their release left the
-      # catalog or their finished ZIM already exists (--clean-partials). Default true. A .part file that a later run
-      # can still resume is never deleted.
+      # catalog, or VERIFY_LIBRARY just verified their finished ZIM as good (--clean-partials). Default true. A .part
+      # file that a later run can still resume is never deleted.
       CLEAN_PARTIALS: "true"
 
       # Keep the replaced ZIMs instead of purging them (-p). Default false. Needs space for every old version.
@@ -67,7 +67,7 @@ services:
       MAX_SIZE: ""
 
       # Keep at least this much free space in the ZIM directory after a download (--min-free); a download that
-      # would go below it is skipped, e.g. 50G. Default: empty, the updater's own default.
+      # would go below it is skipped and the old ZIM kept, e.g. 50G. Default: empty, the updater's own default (1Gi).
       MIN_FREE_SPACE: ""
 
       # Two-letter upper-case country code to prefer download mirrors from (-l), e.g. DE. Default: empty, Kiwix
