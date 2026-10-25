@@ -18,6 +18,7 @@ setup() {
   keep_copy "$WP_OLD"
   export FAKE_WGET_FAIL="$WP_NEW"
   run_updater -d "$ZIMS"
+  assert_failure 1
   assert_zim_unchanged "$WP_OLD"
   run download_log
   assert_line ' !!! DOWNLOAD FAILED !!!'
@@ -28,6 +29,7 @@ setup() {
   keep_copy "$WP_OLD"
   export FAKE_WGET_SHORT="$WP_NEW"
   run_updater -d "$ZIMS"
+  assert_failure 1
   assert_zim_unchanged "$WP_OLD"
 }
 
@@ -36,15 +38,18 @@ setup() {
   keep_copy "$WP_OLD"
   export FAKE_WGET_META_FAIL=1 FAKE_WGET_SHORT="$WP_NEW"
   run_updater -d "$ZIMS"
+  assert_failure 1
   assert_zim_unchanged "$WP_OLD"
 }
 
 @test "F2: a failure on the first ZIM does not mark the second one failed" {
   make_local_zim "$WP_OLD"
+  keep_copy "$WP_OLD"
   make_local_zim "$WT_OLD"
   export FAKE_WGET_CORRUPT="$WP_NEW"
   run_updater -d -c "$ZIMS"
-  assert_exists "$ZIMS/$WP_OLD"
+  assert_failure 1
+  assert_zim_unchanged "$WP_OLD"
   cmp "$ZIMS/$WT_NEW" "$(remote_file "$WT_REMOTE")"
   refute_exists "$ZIMS/$WT_OLD"
 }
@@ -89,6 +94,7 @@ setup() {
   make_local_zim "$WP_OLD"
   printf 'unrelated' >"$RUN_DIR/$WP_NEW"
   run_updater -d "$ZIMS"
+  assert_success
   cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
   refute_exists "$ZIMS/$WP_OLD"
   run cat "$RUN_DIR/$WP_NEW"
@@ -99,6 +105,7 @@ setup() {
   make_local_zim "$WP_OLD"
   printf 'unrelated' >"$RUN_DIR/$WP_NEW"
   run_updater -d -t "$ZIMS"
+  assert_success
   cmp "$ZIMS/$WP_NEW.torrent" "$(remote_file "$WP_REMOTE.torrent")"
 }
 

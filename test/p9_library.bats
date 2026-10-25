@@ -81,8 +81,8 @@ listed() {
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   run_updater -d --library "$LIB" "$ZIMS"
+  assert_success
   refute_output --partial 'Another instance is already running'
-  [[ "$status" -ne 75 ]]
 }
 
 @test "library: a dry-run creates and changes nothing" {
