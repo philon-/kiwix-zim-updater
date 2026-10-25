@@ -38,19 +38,3 @@ setup() {
   assert_output --partial '- DISABLED -'
   assert_output --partial '!!! Caution !!!'
 }
-
-@test "cli: without a .git next to the script, self-update is skipped and git never runs" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  run_updater -U "$ZIMS"
-  assert_success
-  assert_output --partial 'Git Clone Not Detected: Skipping Update Check'
-  run cat "$FAKE_GIT_LOG"
-  assert_output ''
-}
-
-@test "cli: -u skips the self-update check" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  run_updater -u "$ZIMS"
-  assert_success
-  assert_output --partial 'Check Skipped'
-}

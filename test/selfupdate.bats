@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# H8: self-update is opt-in (-U) and never touches a clone it should not.
+# Self-update: opt-in (-U), never touches a clone it should not (H8), and never moves the run files (H3).
 
 setup() {
   load 'helpers/common'
@@ -9,7 +9,7 @@ setup() {
 ###############################################################################
 # Opt-in
 
-@test "H8: a default run makes no git call, even next to a .git" {
+@test "a default run makes no git call, even next to a .git (H8)" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=current
   make_local_zim "$WP_OLD"
@@ -21,25 +21,26 @@ setup() {
   assert_output ''
 }
 
-@test "H8: -u and --skip-update are still accepted and run no git" {
+@test "-u and --skip-update are still accepted and run no git (H8)" {
   mkdir "$SANDBOX/bin/.git"
   make_local_zim "$WP_OLD"
   run_updater -u "$ZIMS"
   assert_success
+  assert_output --partial 'Check Skipped'
   run_updater --skip-update "$ZIMS"
   assert_success
   run cat "$FAKE_GIT_LOG"
   assert_output ''
 }
 
-@test "H8: the usage documents -U and the -u compatibility no-op" {
+@test "the usage documents -U and the -u compatibility no-op (H8)" {
   run_updater -h
   assert_success
   assert_line '    -U, --self-update          Updates this script from its git clone before running (off by default).'
   assert_line '    -u, --skip-update          Accepted for compatibility; self-update is now off unless -U is given.'
 }
 
-@test "H8: -U outside a git clone skips the update with a message" {
+@test "-U outside a git clone skips the update with a message (H8)" {
   make_local_zim "$WP_OLD"
   run_updater -U "$ZIMS"
   assert_success
@@ -48,17 +49,36 @@ setup() {
   assert_output ''
 }
 
-@test "H8: --self-update on another branch skips the update" {
+@test "--self-update on another branch skips the update and keeps the run files in the run dir (H3, H8)" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=other-branch
   make_local_zim "$WP_OLD"
   run_updater --self-update "$ZIMS"
   assert_success
   assert_output --partial 'You appear to be on a different branch'
+  assert_exists "$RUN_DIR/download.log"
+  assert_exists "$RUN_DIR/kiwix-index"
+  refute_exists "$SANDBOX/bin/download.log"
+  refute_exists "$SANDBOX/bin/kiwix-index"
+  run download_log
+  assert_line '3. Processing ZIM(s)...'
   run cat "$FAKE_GIT_LOG"
   assert_output --partial 'rev-parse --abbrev-ref HEAD'
   refute_output --partial 'fetch'
   refute_output --partial 'pull'
+}
+
+@test "an up-to-date self-update check keeps download.log and kiwix-index in the run dir (H3)" {
+  mkdir "$SANDBOX/bin/.git"
+  export FAKE_GIT_MODE=current
+  make_local_zim "$WP_OLD"
+  run_updater -U "$ZIMS"
+  assert_success
+  assert_output --partial 'Version: Current'
+  assert_exists "$RUN_DIR/download.log"
+  assert_exists "$RUN_DIR/kiwix-index"
+  refute_exists "$SANDBOX/bin/download.log"
+  refute_exists "$SANDBOX/bin/kiwix-index"
 }
 
 ###############################################################################
@@ -137,7 +157,7 @@ head_of() {
   sgit -C "$1" rev-parse "${2:-HEAD}"
 }
 
-@test "H8: -U with an update available fast-forwards, re-execs once and completes" {
+@test "-U with an update available fast-forwards, re-execs once and completes (H8)" {
   setup_clone
   push_update
   make_local_zim "$WP_OLD"
@@ -158,7 +178,7 @@ head_of() {
   assert_line '3. Processing ZIM(s)...'
 }
 
-@test "H8: -U when up to date reports Version: Current and pulls nothing" {
+@test "-U when up to date reports Version: Current and pulls nothing (H8)" {
   setup_clone
   make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
@@ -169,7 +189,7 @@ head_of() {
   assert_output ''
 }
 
-@test "H8: -U with local changes refuses to update and never stashes" {
+@test "-U with local changes refuses to update and never stashes (H8)" {
   setup_clone
   push_update
   echo 'my local edit' >>"$SANDBOX/clone/NOTES"
@@ -191,7 +211,7 @@ head_of() {
   assert_output ''
 }
 
-@test "H8: -U with an untracked file in the clone refuses to update" {
+@test "-U with an untracked file in the clone refuses to update (H8)" {
   setup_clone
   push_update
   echo 'scratch' >"$SANDBOX/clone/untracked.txt"
@@ -204,7 +224,7 @@ head_of() {
   assert_output ''
 }
 
-@test "H8: -U with a failing fetch reports it and continues with the current version" {
+@test "-U with a failing fetch reports it and continues with the current version (H8)" {
   setup_clone
   push_update
   sgit -C "$SANDBOX/clone" remote set-url origin "$SANDBOX/missing.git"
@@ -221,7 +241,7 @@ head_of() {
   assert_output --partial 'Could not fetch updates'
 }
 
-@test "H8: -U with diverged local commits reports the failed fast-forward and continues" {
+@test "-U with diverged local commits reports the failed fast-forward and continues (H8)" {
   setup_clone
   push_update
   echo 'local commit' >>"$SANDBOX/clone/NOTES"
@@ -237,7 +257,7 @@ head_of() {
   assert_equal "$(head_of "$SANDBOX/clone")" "$before"
 }
 
-@test "H8: without -U a clone with an update available makes no git call" {
+@test "without -U a clone with an update available makes no git call (H8)" {
   setup_clone
   push_update
   make_local_zim "$WP_OLD"
@@ -248,7 +268,7 @@ head_of() {
   assert_output ''
 }
 
-@test "R8: -U re-execs correctly when started as 'bash kiwix-zim-updater.sh' from inside the clone" {
+@test "-U re-execs correctly when started as 'bash kiwix-zim-updater.sh' from inside the clone (R8)" {
   setup_clone
   # download.log and kiwix-index land in the clone (the CWD); ignore them like the real repository does
   cp "$REPO_ROOT/.gitignore" "$SANDBOX/clone/.gitignore"

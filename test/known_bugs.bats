@@ -155,34 +155,6 @@ setup() {
   assert_output ''
 }
 
-@test "H3: self-update never moves download.log or kiwix-index into the script dir" {
-  mkdir "$SANDBOX/bin/.git"
-  export FAKE_GIT_MODE=other-branch
-  make_local_zim "$WP_OLD"
-  run_updater -U "$ZIMS"
-  assert_success
-  assert_output --partial 'You appear to be on a different branch'
-  assert_exists "$RUN_DIR/download.log"
-  assert_exists "$RUN_DIR/kiwix-index"
-  refute_exists "$SANDBOX/bin/download.log"
-  refute_exists "$SANDBOX/bin/kiwix-index"
-  run download_log
-  assert_line '3. Processing ZIM(s)...'
-}
-
-@test "H3: an up-to-date self-update check keeps download.log and kiwix-index in the run dir" {
-  mkdir "$SANDBOX/bin/.git"
-  export FAKE_GIT_MODE=current
-  make_local_zim "$WP_OLD"
-  run_updater -U "$ZIMS"
-  assert_success
-  assert_output --partial 'Version: Current'
-  assert_exists "$RUN_DIR/download.log"
-  assert_exists "$RUN_DIR/kiwix-index"
-  refute_exists "$SANDBOX/bin/download.log"
-  refute_exists "$SANDBOX/bin/kiwix-index"
-}
-
 @test "H5: -n without a value exits 2" {
   make_local_zim "$WP_OLD"
   run_updater "$ZIMS" -n
