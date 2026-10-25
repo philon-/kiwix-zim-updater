@@ -178,6 +178,16 @@ main() {
   trap 'on_signal TERM' TERM
   trap 'on_signal INT' INT
 
+  # Check the arguments or the environment first: a bad value is a usage error, whatever the state directory
+  local interval run=0 status
+  if [[ $# -gt 0 ]]; then
+    refuse_self_update "$@"
+  else
+    interval="$(interval_seconds "$RUN_INTERVAL")" ||
+      usage_error "RUN_INTERVAL must be once, 0 or <number>[s|m|h|d] with at most 12 digits, got '$RUN_INTERVAL'"
+    build_args
+  fi
+
   if ! cd "$STATE_DIR" 2>/dev/null; then
     printf '[docker-entrypoint] cannot change to the state directory %s\n' "$STATE_DIR" >&2
     exit 1
@@ -185,15 +195,10 @@ main() {
 
   # Arguments given: run once with exactly those arguments
   if [[ $# -gt 0 ]]; then
-    refuse_self_update "$@"
     run_updater "$@"
     exit "$run_status"
   fi
 
-  local interval run=0 status
-  interval="$(interval_seconds "$RUN_INTERVAL")" ||
-    usage_error "RUN_INTERVAL must be once, 0 or <number>[s|m|h|d] with at most 12 digits, got '$RUN_INTERVAL'"
-  build_args
   if [[ ! -w "$STATE_DIR" ]]; then
     printf '[docker-entrypoint] the state directory %s is not writable by uid %s\n' "$STATE_DIR" "$(id -u)" >&2
     exit 1

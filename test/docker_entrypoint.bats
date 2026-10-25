@@ -309,6 +309,19 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
   [[ "$(stub_runs)" -eq 0 ]]
 }
 
+@test "entrypoint: an invalid value is a usage error even when STATE_DIR does not exist" {
+  run --separate-stderr env RUN_INTERVAL=once DRY_RUN=maybe STATE_DIR="$SANDBOX/missing" "$ENTRYPOINT"
+  assert_failure 2
+  [[ "$stderr" == *DRY_RUN*maybe* ]]
+  run --separate-stderr env RUN_INTERVAL=1w STATE_DIR="$SANDBOX/missing" "$ENTRYPOINT"
+  assert_failure 2
+  [[ "$stderr" == *RUN_INTERVAL* ]]
+  run --separate-stderr env STATE_DIR="$SANDBOX/missing" "$ENTRYPOINT" -U /data
+  assert_failure 2
+  [[ "$stderr" == *-U* ]]
+  [[ "$(stub_runs)" -eq 0 ]]
+}
+
 @test "entrypoint: an overflowing RUN_INTERVAL is a usage error, not a back-to-back loop" {
   local value
   for value in 9223372036854775808s 9223372036854775807d 1000000000000d 0000000000000001s; do
