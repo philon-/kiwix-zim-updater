@@ -119,3 +119,56 @@ keep_copy() {
   [[ ! -e "$ZIMS/.~lock.$W" ]]
   [[ "$stderr" != *"cannot remove"* ]]
 }
+
+@test "R3: -f -d verifies a locked outdated ZIM against its own checksum and never deletes it" {
+  make_local_zim "$WOLD"
+  make_local_sha256 "$WOLD"
+  keep_copy "$WOLD"
+  cp "$ZIMS/$WOLD.sha256" "$SANDBOX/sha256.orig"
+  touch "$ZIMS/.~lock.$WOLD"
+  export FAKE_WGET_FAIL="$W"
+  run_updater -f -d "$ZIMS"
+  assert_success
+  assert_output --partial 'Cached Checksum Found'
+  assert_output --partial 'Checksum passed'
+  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  cmp "$ZIMS/$WOLD.sha256" "$SANDBOX/sha256.orig"
+  run wget_downloads
+  assert_output ''
+}
+
+@test "R3: -f -d -p never rewrites a locked outdated ZIM's cached checksum with the newer release's hash" {
+  make_local_zim "$WOLD"
+  make_local_sha256 "$WOLD"
+  cp "$ZIMS/$WOLD.sha256" "$SANDBOX/sha256.orig"
+  touch "$ZIMS/.~lock.$WOLD"
+  run_updater -f -d -p "$ZIMS"
+  cmp "$ZIMS/$WOLD.sha256" "$SANDBOX/sha256.orig"
+  [[ -f "$ZIMS/$WOLD" ]]
+}
+
+@test "R5: -f -d does not resume an update download for an outdated ZIM it checks by cached checksum" {
+  make_local_zim "$WOLD"
+  make_local_sha256 "$WOLD"
+  head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
+  cp "$ZIMS/$W" "$SANDBOX/partial.orig"
+  touch "$ZIMS/.~lock.$W"
+  run_updater -f -d "$ZIMS"
+  assert_success
+  refute_output --partial 'resuming'
+  refute_output --partial 'removing corrupt file'
+  cmp "$ZIMS/$W" "$SANDBOX/partial.orig"
+  [[ -f "$ZIMS/.~lock.$W" ]]
+  run wget_downloads
+  assert_output ''
+}
+
+@test "R5: -f -d still finishes an interrupted download of the current catalog version" {
+  head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
+  touch "$ZIMS/.~lock.$W"
+  run_updater -f -d "$ZIMS"
+  assert_success
+  assert_output --partial 'Incomplete download detected, resuming'
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
+}

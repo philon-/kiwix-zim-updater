@@ -764,7 +764,9 @@ main() {
     fi
 
     echo -e "${BLUE_BOLD}  - $FileName:${CLEAR}"
-    [[ -f "$ZIMPath.~lock.$FileName" ]] && echo -e "${YELLOW_REGULAR}    Incomplete download detected\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalRequiresDownloadArray+=(1) && AnyDownloads=1 && continue
+    # A locked ZIM is an interrupted download to finish. With -f only the current catalog version can be finished; an
+    # outdated one is verified against its own checksum like any other outdated ZIM below.
+    [[ -f "$ZIMPath.~lock.$FileName" ]] && { [[ $VERIFY_LIBRARY -eq 0 ]] || [[ "${RemoteFiles[$RemoteIndex]}" == "$FileName" ]]; } && echo -e "${YELLOW_REGULAR}    Incomplete download detected\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalRequiresDownloadArray+=(1) && AnyDownloads=1 && continue
 
 
     MatchingSize=${FileSizes[$RemoteIndex]}
@@ -864,7 +866,8 @@ main() {
 
       echo -e "${BLUE_BOLD}  Processing $OldZIM${CLEAR}"
 
-      if [[ ${LocalRequiresDownloadArray[$z]} -eq 3 ]]; then
+      if [[ ${LocalRequiresDownloadArray[$z]} -eq 2 ]] || [[ ${LocalRequiresDownloadArray[$z]} -eq 3 ]]; then
+        # Verified against its own cached checksum only: no metadata, no download
         ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
 
         NewZIM="$OldZIM"
@@ -877,10 +880,6 @@ main() {
         NewZIMPath="$OldZIMPath"
       else
         mirror_search # Let's look for a mirror URL first.
-
-        if [[ ${LocalRequiresDownloadArray[$z]} -eq 2 ]]; then
-          ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
-        fi
 
         NewZIM=${RemoteFiles[${LocalZIMRemoteIndexArray[$z]}]}
         NewZIMPath=$ZIMPath$NewZIM
@@ -924,15 +923,15 @@ main() {
           echo
         fi
       else
-        # lockfile implies an incomplete download
-        if [[ -f $LockFilePath ]]; then
+        # lockfile implies an incomplete download (only the current catalog version, state 1, is ever downloaded)
+        if [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] && [[ -f $LockFilePath ]]; then
           echo "Incomplete download detected, resuming" >>"$LOG_FILE"
           echo -e "${YELLOW_REGULAR}    Status: Incomplete download detected, resuming${CLEAR}"
 
           #                [[ $IsMirror -eq 0 ]] && echo -e "${BLUE_BOLD}  Download (direct) : $DownloadURL${CLEAR}"
           #                [[ $IsMirror -eq 1 ]] && echo -e "${BLUE_BOLD}  Download (mirror) : $DownloadURL${CLEAR}"
           RequiresDownload=1
-        elif [[ -f $TorrentFilePath ]]; then
+        elif [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] && [[ -f $TorrentFilePath ]]; then
           echo -e "${YELLOW_REGULAR}    Status: Torrent exists, skipping${CLEAR}"
           echo "Skipping checksum for torrent : $OldZIM. If the download has been completed, please delete the .torrent if you want me to verify the checksum." >>"$LOG_FILE"
         else
