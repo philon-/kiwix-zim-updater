@@ -539,6 +539,7 @@ mirror_search() {
 # Begin Script Execute
 #########################
 
+main() {
 CountryCodeWarning="" # shown after the screen is cleared
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -1166,3 +1167,9 @@ if [[ $AnyVerifyFailed -eq 1 ]]; then
   exit 1
 fi
 exit 0
+}
+
+# Run only when executed; when sourced (e.g. by the unit tests) just define the functions and defaults
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
