@@ -277,7 +277,6 @@ EOF
 }
 
 @test "H7: a missing wget exits 1 with a clear message" {
-  skip "H7: no dependency preflight; a missing wget looks like an empty catalog"
   local tooldir="$SANDBOX/tools" tool src
   local base_path="${PATH#"$STUB_BIN:"}"
   mkdir "$tooldir"

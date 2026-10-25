@@ -424,6 +424,25 @@ detect_wget_flavor() {
   fi
 }
 
+# check_dependencies - Make sure every external tool the run needs is present before doing any work
+check_dependencies() {
+  local missing=() tool
+  for tool in wget numfmt sha256sum flock stat du timeout; do
+    command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+  done
+  # The parsing relies on Perl-compatible regular expressions, which not every grep has
+  echo x | grep -qP 'x' 2>/dev/null || missing+=("grep -P")
+  # git is only needed when the self-update would actually run
+  if [[ $SKIP_UPDATE -eq 0 ]] && [[ -d "$SCRIPTPATH/.git" ]]; then
+    command -v git >/dev/null 2>&1 || missing+=("git")
+  fi
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo -e "${RED_BOLD}✗ Missing required tool(s): ${missing[*]}. Please install them and try again. Exiting...${CLEAR}" >&2
+    echo "✗ Missing required tool(s): ${missing[*]}. Exiting..." >> "$LOG_FILE"
+    exit 1
+  fi
+}
+
 # hash_matches <name> <hash> - True if $ZIMPath<name> has the given sha256. Needs no .sha256 file on disk.
 hash_matches() {
   (cd "$ZIMPath" && printf '%s  %s\n' "$2" "$1" | sha256sum --status -c - 2>/dev/null)
@@ -599,6 +618,7 @@ echo
 echo "=========================================="
 echo
 
+check_dependencies
 detect_wget_flavor
 
 # First, Self-Update Check.
