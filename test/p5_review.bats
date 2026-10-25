@@ -211,3 +211,15 @@ keep_copy() {
   assert_failure 1
   assert_output --partial 'Checksum failed'
 }
+
+@test "wget2: downloads also carry --no-metalink, so -O is always honoured" {
+  export FAKE_WGET_FLAVOR=wget2
+  make_local_zim "$WOLD"
+  run_updater -d "$ZIMS"
+  assert_success
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  run wget_downloads
+  assert_output --partial -- '--no-metalink'
+  run bash -c 'grep -e " -O " "$1" | grep -v -e " -O - " | grep -v -e --no-metalink' _ "$FAKE_WGET_LOG"
+  assert_output ''
+}

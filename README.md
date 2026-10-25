@@ -112,7 +112,7 @@ This script does not need root, however it does need the same rights as your ZIM
 - Bash 4 or later.
 - GNU coreutils: `numfmt`, `stat`, `du`, `sha256sum`, `timeout` (and GNU `date`).
 - `flock` from util-linux.
-- `wget` 1.x or GNU Wget2. Wget2 is supported: it follows metalinks by default, so the script passes `--no-metalink` to it for its metadata requests.
+- `wget` 1.x or GNU Wget2. Wget2 is supported: it follows metalinks by default, so the script passes `--no-metalink` to it for its metadata requests and downloads.
 - `grep` with `-P` (PCRE) support.
 - `git`, only if you use the self-update (`-U`).
 

@@ -55,8 +55,9 @@ IsMirror=0
 DownloadURL=""
 ExpectedSize=""
 ExpectedHash=""
-# Extra wget options for .meta4 requests. GNU Wget2 follows metalinks by default and would hand us the ZIM itself
-# instead of the metadata; wget 1.x rejects --no-metalink, so this is filled in by detect_wget_flavor.
+# Extra wget options for .meta4 requests and downloads. GNU Wget2 follows metalinks by default: it would hand us the
+# ZIM itself instead of the metadata, and on a download it may follow the server's metalink headers instead of simply
+# writing the -O file. wget 1.x rejects --no-metalink, so this is filled in by detect_wget_flavor.
 WGET_META_OPTS=()
 # sort of a default, will be overwritten when the library is parsed. Set here to what it probably will be
 BaseURL="https://lb.download.kiwix.org/zim/"
@@ -570,7 +571,7 @@ write_checksum_file() {
 # download_file - Download (or resume) $2 into $1, showing progress and logging it. Returns wget's own exit status,
 # not tee's.
 download_file() {
-  wget -q --show-progress --progress=bar:force -c -O "$1" "$2" 2>&1 | tee -a "$LOG_FILE"
+  wget "${WGET_META_OPTS[@]}" -q --show-progress --progress=bar:force -c -O "$1" "$2" 2>&1 | tee -a "$LOG_FILE"
   return "${PIPESTATUS[0]}"
 }
 
