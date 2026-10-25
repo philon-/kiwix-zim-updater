@@ -56,12 +56,17 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   [[ "$(zim_dir_snapshot)" == "$before" ]]
 }
 
-@test "verify: -f with an outdated ZIM and no checksum anywhere skips it" {
+@test "verify: -f with an outdated ZIM and no checksum anywhere keeps it but exits 1" {
   make_local_zim wikipedia_en_test_2025-12.zim
+  local before
+  before="$(zim_dir_snapshot)"
   run_updater -f "$ZIMS"
-  assert_success
+  # It could not be verified: exit 1 per the exit-code contract (reported by Copilot on PR #1)
+  assert_failure 1
   assert_output --partial 'Checking for online checksum...'
   assert_output --partial 'Online Version Not Found'
+  assert_output --partial 'it cannot be verified. Kept'
+  assert_equal "$(zim_dir_snapshot)" "$before"
   run grep -c -- '--spider' "$FAKE_WGET_LOG"
   assert_output '1'
 }

@@ -1016,7 +1016,11 @@ main() {
             echo -e "${GREEN_BOLD}    ✓ Online Version Found${CLEAR}"
           else
             LocalRequiresDownloadArray+=(0)
+            # Nothing to verify it against: the file is kept, but the verification failed (exit 1)
             echo "    ✗ Online Version Not Found"
+            echo -e "${YELLOW_BOLD}    No checksum for $FileName anywhere, it cannot be verified. Kept; a normal update run replaces it with the newer version.${CLEAR}"
+            echo "Cannot verify $FileName: no checksum available locally or online. Kept." >>"$LOG_FILE"
+            AnyVerifyFailed=1
           fi
         fi
       else
