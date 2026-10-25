@@ -57,7 +57,9 @@ rebuild() {
     source /usr/local/bin/kiwix-zim-updater.sh
     ZIMPath=/data/ LIBRARY_XML=/data/library.xml DEBUG=0 LOG_FILE=/tmp/download.log
     rebuild_library; status=$?
-    sleep 3 # let the delayed touch happen before the container goes away
+    # rebuild_library touches the library file again in the background after "sleep 2", so that kiwix-serve
+    # reloads the finished file: outlast it, or the container (and that touch) is gone before it happens
+    sleep 3
     exit $status'
 }
 
