@@ -23,12 +23,18 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 | `test/p6_followups.bats`, `test/p7_partials.bats` | Follow-ups: size limits on resumes, checksum-file timing, `.part` staging and the cleanup of unfinished downloads. |
 | `test/p8_unattended.bats` | Unattended safety: network limits, the `--min-free` reserve, and that an internet outage leaves the ZIM directory unchanged. |
 | `test/unit.bats` | Unit tests. They `source` the script and call its functions directly. |
+| `test/docker_entrypoint.bats` | Tests of the container entrypoint and health check, with a stub updater. No Docker needed. |
+| `test/docker-smoke.sh` | `make docker-test`: builds the image and smoke-tests it offline with the stubs. Not part of `make test`. |
 | `test/helpers/common.bash` | Shared setup. It creates a sandbox, copies the script there and prepends the stub `PATH`. |
 | `test/helpers/bin/` | Stubs for `wget`, `clear`, `git` and `df`, so tests never touch the network or the real repository, and free-space checks do not depend on the machine. |
 | `test/fixtures/` | A fake catalog, `.meta4` files and payloads served by the `wget` stub. `build.sh` regenerates them. |
 | `test/libs/` | Pinned git submodules for bats-core, bats-support and bats-assert. |
-| `Makefile` | `make test`, `make lint`. |
-| `.github/workflows/ci.yml` | CI runs lint and tests on every push and pull request. |
+| `Dockerfile`, `.dockerignore` | The container image (`debian:trixie-slim`, non-root, `tini`). |
+| `docker/docker-entrypoint.sh` | Container entrypoint: maps environment variables to options and runs the script on a schedule from `/state`. |
+| `docker/healthcheck.sh` | Container health check: reads the last run's status from `/state/last-run`. |
+| `compose.example.yaml` | Example Compose file with every environment variable documented. |
+| `Makefile` | `make test`, `make lint`, `make docker-test`. |
+| `.github/workflows/ci.yml` | CI runs lint and tests on every push and pull request, and `make docker-test` with Docker. |
 
 Set up and run everything with:
 

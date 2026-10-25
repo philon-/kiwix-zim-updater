@@ -103,6 +103,88 @@ Here `download.log` and `kiwix-index` end up in `/var/lib/kiwix`. Exit code 75 o
 
 For unattended use, consider adding `-c`: without it, a replacement is verified by its size only before the old ZIM is purged; with it, also by its sha256. If the disk holding the ZIMs is shared with other services, raise `--min-free` so updates always leave them room. During an internet outage every run simply exits 1 and changes nothing, so it is safe to keep the cron job running.
 
+## Running with Docker
+
+The repository includes a `Dockerfile` for unattended use with Docker or Podman. The image is based on `debian:trixie-slim` and holds only the script and the tools it needs. It runs as an unprivileged user (uid/gid 1000) under `tini`. The image contains no git and never updates itself: to update, build or pull a new image.
+
+### Build
+
+```shell
+docker build -t kiwix-zim-updater .
+podman build --format docker -t kiwix-zim-updater .   # --format docker keeps the HEALTHCHECK
+```
+
+### Run with Compose
+
+Copy [`compose.example.yaml`](./compose.example.yaml) to `compose.yaml`, set the path of your ZIM directory and the variables, then start it:
+
+```shell
+cp compose.example.yaml compose.yaml
+PUID=$(stat -c %u /srv/kiwix/zims) PGID=$(stat -c %g /srv/kiwix/zims) docker compose up -d --build
+docker compose logs -f kiwix-zim-updater
+```
+
+Without arguments, the container runs the updater right away and then again every `RUN_INTERVAL` (default `24h`, counted from the end of a run). It prints one line when a run starts and one when it ends, and records the exit code and UTC time of each finished run in `/state/last-run`, for example `exit=0 time=2026-10-25T12:00:00Z`. Exit 75 (another instance is busy with the same ZIM directory) is not treated as an error; the next run tries again.
+
+**Start with a dry-run.** The example starts with `DRY_RUN: "true"`, the default, so the first runs only report what they would download and purge, and change nothing in the ZIM directory. Read the log (`docker compose logs` or `download.log` in the state volume), then set `DRY_RUN: "false"` and run `docker compose up -d` again.
+
+### One-off runs
+
+Arguments after the image name are passed to the script unchanged, and the container exits with the script's exit code. The environment variables below are then ignored and no schedule runs:
+
+```shell
+docker run --rm kiwix-zim-updater -h
+docker run --rm --user "$(id -u):$(id -g)" -v /srv/kiwix/zims:/data -v kiwix-state:/state kiwix-zim-updater -c /data
+```
+
+`-U` (self-update) is refused in the container.
+
+### Environment variables
+
+Booleans accept `true`, `false`, `1`, `0`, `yes` and `no` in any case; an empty value means the default. An invalid value makes the container exit 2 with a message on stderr, before anything runs.
+
+| Variable | Default | Maps to | Notes |
+|---|---|---|---|
+| `DRY_RUN` | `true` | `-d` when `false` | Leave on until a dry-run log looked right. |
+| `RUN_INTERVAL` | `24h` | sleep between runs | `<number>[s\|m\|h\|d]`. `once` or `0` runs once and exits with the script's exit code. |
+| `CHECKSUM` | `true` | `-c` | Web downloads only; never passed with `DOWNLOAD_METHOD=torrent`. |
+| `CLEAN_PARTIALS` | `true` | `--clean-partials` | Deletes only `.part` files that no run can use any more. |
+| `SKIP_PURGE` | `false` | `-p` | Keep replaced ZIMs. |
+| `VERIFY_LIBRARY` | `false` | `-f` | Not with `DOWNLOAD_METHOD=torrent` (exit 2). |
+| `NO_SHA` | `false` | `-S` | Do not write `.sha256` files. |
+| `MIN_SIZE`, `MAX_SIZE` | empty | `-n <v>`, `-x <v>` | Sizes like `500M` or `10G`. |
+| `MIN_FREE_SPACE` | empty | `--min-free <v>` | Free space to keep in the ZIM directory after a download; empty uses the script's default. |
+| `COUNTRY` | empty | `-l <v>` | Two-letter mirror country code, e.g. `DE`. |
+| `DOWNLOAD_METHOD` | `web` | `-w` or `-t` | `web` or `torrent`. |
+| `FORCE_FETCH_INDEX` | `false` | `-g` | Fetch the catalog on every run. |
+| `EXTRA_ARGS` | empty | appended | Advanced: more script options, split on whitespace. `-U` is refused. |
+| `ZIM_DIR` | `/data` | the ZIM directory | Path inside the container. |
+| `STATE_DIR` | `/state` | working directory | `download.log`, `kiwix-index` and `last-run` land here. |
+
+With the defaults, each run calls `kiwix-zim-updater.sh -w -c --clean-partials /data`, a dry-run.
+
+### Volumes and permissions
+
+- `/data` is the ZIM directory. Mount it read-write for downloads and purges. A read-only mount works for dry-runs; with `DRY_RUN=false` the script then falls back to a dry-run and the run exits 1.
+- `/state` is the working directory: `download.log`, the `kiwix-index` catalog cache and `last-run`. Use a named volume or a bind mount, so that the log and the cache survive a new container. None of these files is ever written to `/data`.
+- The container must run as a user that can write both. Set `user:` in Compose (the example uses `${PUID:-1000}:${PGID:-1000}`) or `--user` with `docker run` to the owner of the ZIM directory. A new named volume is owned by uid 1000; with a different user, use a bind mount owned by that user for `/state`.
+
+### Health check
+
+The image's `HEALTHCHECK` runs `healthcheck.sh` every 5 minutes. The container is healthy while no run has finished yet, and when the last run exited 0 or 75 or was interrupted by a stop. It is unhealthy when the last run failed, so a failure shows up in `docker ps` and in your monitoring. It becomes healthy again after the next successful run. Being unhealthy changes nothing in the ZIM directory.
+
+### Stopping safely
+
+`docker stop` (or `docker compose stop`) sends SIGTERM. The entrypoint forwards it to the running script and its `wget`, waits for them, records the interrupted run in `last-run` and exits. An interrupted download stays a `<name>.zim.part` file and the next run resumes it; the old ZIM stays in place until its replacement is verified. A stop during the sleep between runs exits straight away. The example sets `stop_grace_period: 2m`; avoid `docker kill`, which gives the script no chance to finish its log.
+
+### Serving the library with kiwix-serve
+
+`compose.example.yaml` contains a commented-out `kiwix-serve` service (`ghcr.io/kiwix/kiwix-serve`) that mounts the same ZIM directory read-only. kiwix-serve keeps serving the file it opened at start-up, even after the updater replaced it, and only picks up updated or new ZIMs after a restart, for example from a cron job after the update window. Unfinished downloads are `.part` files, which kiwix-serve never sees.
+
+### During an internet outage
+
+When the catalog or the downloads cannot be reached, the run fails with exit 1, `last-run` records it and the container becomes unhealthy. Nothing in `/data` is touched: a ZIM is only replaced after its new version was downloaded and verified, so the existing ZIMs stay complete and usable offline, and kiwix-serve keeps serving them. A download cut off half-way stays a `.part` file and is resumed once the connection is back. The container keeps running and tries again after `RUN_INTERVAL`.
+
 ## Limitations
 
 - This script relies heavily on `grep`'s `-P` flag for lookarounds and the matcher reset, `\K`. This may cause compatibility problems on macOS.
@@ -203,6 +285,8 @@ make lint    # ShellCheck the script and the test harness
 ```
 
 `make lint` uses `shellcheck` when it is installed and otherwise runs the pinned `koalaman/shellcheck` container image with `podman`. CI (GitHub Actions) runs `make lint` and `make test` on every push and pull request.
+
+`make docker-test` builds the container image with `podman` (or `docker`; set `CONTAINER_ENGINE` to choose) and smoke-tests it offline with the stubs below, with no network in the containers. CI runs it with Docker. It is not part of `make test`.
 
 The tests never touch the network, your ZIMs or this repository. Each test copies the script into its own temporary sandbox outside the repository, runs it from a temporary directory against a temporary ZIM directory, and puts stubs from `test/helpers/bin/` first on `PATH`:
 
