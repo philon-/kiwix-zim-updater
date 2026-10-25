@@ -20,6 +20,9 @@
 #                               bytes to the -O file but exit 0
 #   FAKE_WGET_CORRUPT=<substr>  download URL matching: write the same number
 #                               of bytes with different content, exit 0
+#   FAKE_WGET_NETFAIL=<substr>  download URL matching: exit 4 without creating
+#                               or touching the -O file, like a connection
+#                               failure before any data arrives
 #   FAKE_WGET_META_FAIL=1       every .meta4 request exits 8 with no output
 #   FAKE_WGET_CATALOG_FAIL=1    the catalog request exits 4 with no output
 #   FAKE_WGET_FLAVOR=wget2      behave like GNU Wget2, which follows a
@@ -160,6 +163,9 @@ fi
 
 size=$(stat -c %s "$src")
 
+if matches "${FAKE_WGET_NETFAIL:-}"; then
+  exit 4
+fi
 if matches "${FAKE_WGET_FAIL:-}"; then
   head -c "$((size / 2))" "$src" >"$out"
   exit 4

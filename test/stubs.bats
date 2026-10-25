@@ -125,3 +125,14 @@ setup() {
   run diff -r "$FIXTURES_SRC" "$SANDBOX/rebuilt"
   assert_success
 }
+
+@test "stubs: FAKE_WGET_NETFAIL fails a download without touching the -O file" {
+  printf 'keep' >"$SANDBOX/out.zim"
+  FAKE_WGET_NETFAIL=small_test run wget -q -c -O "$SANDBOX/out.zim" https://mirror.kiwix.test/zim/other/small_test_2025-12.zim
+  assert_failure 4
+  run cat "$SANDBOX/out.zim"
+  assert_output 'keep'
+  FAKE_WGET_NETFAIL=small_test run wget -q -O "$SANDBOX/new.zim" https://mirror.kiwix.test/zim/other/small_test_2025-12.zim
+  assert_failure 4
+  [[ ! -e "$SANDBOX/new.zim" ]]
+}

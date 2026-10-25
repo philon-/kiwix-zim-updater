@@ -37,7 +37,7 @@ common_setup() {
   chmod +x "$SCRIPT_COPY"
 
   # Stub knobs: start from a clean slate whatever the caller's environment.
-  unset FAKE_WGET_FAIL FAKE_WGET_SHORT FAKE_WGET_CORRUPT FAKE_WGET_META_FAIL \
+  unset FAKE_WGET_FAIL FAKE_WGET_NETFAIL FAKE_WGET_SHORT FAKE_WGET_CORRUPT FAKE_WGET_META_FAIL \
     FAKE_WGET_CATALOG_FAIL FAKE_WGET_FLAVOR FAKE_GIT_MODE
   # Globals the script reads without initialising them (finding M4). Unset
   # them so that nothing leaks in from the environment running the tests.
