@@ -304,6 +304,7 @@ self_update() {
 }
 
 # usage_example [<exit code>] - Show Usage and Exit (default 0). On a usage error the text goes to stderr.
+# shellcheck disable=SC2016 # the backticks in the help text are meant literally, nothing should expand
 usage_example() {
   local status="${1:-0}"
   [[ "$status" -ne 0 ]] && exec 1>&2 # we exit below, so redirecting the rest of the script is harmless
@@ -461,21 +462,21 @@ flags() {
   echo -e "${BLUE_BOLD}  -Parsing ZIM(s)...${CLEAR}"
 
   for ((i = 0; i < ${#LocalZIMArray[@]}; i++)); do                                             # Loop through local ZIM(s).
-    LocalZIMNameArray[$i]=$(basename "${LocalZIMArray[$i]}")                                   # Extract file name.
+    LocalZIMNameArray[i]=$(basename "${LocalZIMArray[$i]}")                                   # Extract file name.
     filename=$(basename "${LocalZIMArray[$i]}" | grep -ioP "^[\w:\/\-.]+(?=$COMPLETE_ENDING_REGEX$)") # Extract file name.
     #        IFS='_' read -ra fields <<< "${LocalZIMNameArray[$i]}"; unset IFS  # Break the filename into fields delimited by the underscore '_'
 
     # Search MasterZIMArray for the current local ZIM to discover the online Root (directory) for the URL
     for ((z = 0; z < ${#Basenames[@]}; z++)); do
       if [[ ${Basenames[$z]} == "$filename" ]]; then # Match Found (ignore the filename datepart).
-        LocalZIMRemoteIndexArray[$i]="$z"
+        LocalZIMRemoteIndexArray[i]="$z"
         break
       else # No Match Found.
-        LocalZIMRemoteIndexArray[$i]="-1"
+        LocalZIMRemoteIndexArray[i]="-1"
       fi
     done
 
-    if [[ LocalZIMRemoteIndexArray[$i] -eq -1 ]]; then
+    if [[ ${LocalZIMRemoteIndexArray[i]} -eq -1 ]]; then
       echo -e "${RED_REGULAR}    ✗ ${LocalZIMNameArray[$i]}  No online match found.${CLEAR}"
     else
       echo -e "${GREEN_BOLD}    ✓ ${LocalZIMNameArray[$i]}  [${RemoteCategory[${LocalZIMRemoteIndexArray[$i]}]}]${CLEAR}"
@@ -766,7 +767,6 @@ main() {
 
     MatchingSize=${FileSizes[$RemoteIndex]}
     MatchingFileName=${RemoteFiles[$RemoteIndex]}
-    MatchingFullPath=${RemotePaths[$RemoteIndex]}
     MatchingCategory=${RemoteCategory[$RemoteIndex]}
 
     [[ -f "$ZIMPath$MatchingFileName.torrent" ]] && [[ ! -f "$ZIMPath$MatchingFileName" ]] && echo -e "${YELLOW_REGULAR}    Torrent already downloaded\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalRequiresDownloadArray+=(0) && continue
@@ -784,12 +784,12 @@ main() {
     if [ $VERIFY_LIBRARY -eq 1 ] && [ $FileSizeAcceptable -eq 0 ]; then
       if [ $FileTooSmall -eq 1 ]; then
         LocalRequiresDownloadArray+=(0)
-        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Verification skipped due to file size (minimum: $(numfmt --to=iec-i $MIN_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
-        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Verification skipped due to file size (minimum: $(numfmt --to=iec-i $MIN_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
+        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Verification skipped due to file size (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
+        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Verification skipped due to file size (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
       elif [ $FileTooLarge -eq 1 ]; then
         LocalRequiresDownloadArray+=(0)
-        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Verification skipped due to file size (maximum: $(numfmt --to=iec-i $MAX_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
-        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Verification skipped due to file size (maximum: $(numfmt --to=iec-i $MAX_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
+        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Verification skipped due to file size (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
+        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Verification skipped due to file size (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
       fi
     elif [[ "$MatchingFileName" == "$FileName" ]]; then
       if [ $VERIFY_LIBRARY -eq 1 ]; then
@@ -820,12 +820,12 @@ main() {
       else
         if [ $FileTooSmall -eq 1 ]; then
           LocalRequiresDownloadArray+=(0)
-          [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (minimum: $(numfmt --to=iec-i $MIN_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
-          [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (minimum: $(numfmt --to=iec-i $MIN_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+          [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+          [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
         elif [ $FileTooLarge -eq 1 ]; then
           LocalRequiresDownloadArray+=(0)
-          [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (maximum: $(numfmt --to=iec-i $MAX_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
-          [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (maximum: $(numfmt --to=iec-i $MAX_SIZE), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+          [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+          [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
         elif ! zim_is_newer "$MatchedDate" "$LocalDate"; then
           LocalRequiresDownloadArray+=(0)
           echo "    ✗ No new update"
@@ -1019,12 +1019,14 @@ main() {
         [[ $IsMirror -eq 0 ]] && echo -e "${BLUE_REGULAR}    Download (direct) : $DownloadURL${CLEAR}"
         [[ $IsMirror -eq 1 ]] && echo -e "${BLUE_REGULAR}    Download (mirror) : $DownloadURL${CLEAR}"
 
-        echo >>"$LOG_FILE"
-        echo "=======================================================================" >>"$LOG_FILE"
-        echo "File : $NewZIM" >>"$LOG_FILE"
-        [[ $IsMirror -eq 0 ]] && echo "URL (direct) : $DownloadURL" >>"$LOG_FILE"
-        [[ $IsMirror -eq 1 ]] && echo "URL (mirror) : $DownloadURL" >>"$LOG_FILE"
-        echo >>"$LOG_FILE"
+        {
+          echo
+          echo "======================================================================="
+          echo "File : $NewZIM"
+          [[ $IsMirror -eq 0 ]] && echo "URL (direct) : $DownloadURL"
+          [[ $IsMirror -eq 1 ]] && echo "URL (mirror) : $DownloadURL"
+          echo
+        } >>"$LOG_FILE"
 
         if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
           FilePath="$FilePath.torrent"
