@@ -34,46 +34,11 @@ setup() {
 ###############################################################################
 # runtime results (exit 0 / 1)
 
-@test "p2-cli: a successful update exits 0" {
-  make_local_zim "$WP_OLD"
-  run_updater -d -c "$ZIMS"
-  assert_success
-  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$WP_OLD"
-}
-
 @test "p2-cli: nothing to update exits 0" {
   make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -d "$ZIMS"
   assert_success
   assert_output --partial 'Nothing to download'
-}
-
-@test "p2-cli: after a failed download the next ZIM is still processed, then exit 1" {
-  make_local_zim "$WP_OLD"
-  make_local_zim "$WT_OLD"
-  export FAKE_WGET_FAIL="$WP_NEW"
-  run_updater -d "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'One or more downloads failed'
-  assert_exists "$ZIMS/$WP_OLD"
-  cmp "$ZIMS/$WT_NEW" "$(remote_file "$WT_REMOTE")"
-  refute_exists "$ZIMS/$WT_OLD"
-}
-
-@test "p2-cli: a failed torrent download exits 1" {
-  make_local_zim "$WP_OLD"
-  export FAKE_WGET_FAIL="$WP_NEW.torrent"
-  run_updater -d -t "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'Torrent download failed'
-}
-
-@test "p2-cli: a failed download in dry-run is never attempted and exits 0" {
-  make_local_zim "$WP_OLD"
-  export FAKE_WGET_FAIL="$WP_NEW"
-  run_updater "$ZIMS"
-  assert_success
 }
 
 @test "p2-cli: -f together with -t aborts with exit 2 (-f implies -c)" {

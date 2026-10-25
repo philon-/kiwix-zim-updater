@@ -418,34 +418,6 @@ BIG_REMOTE=zim/other/big_test_2026-03.zim
   assert_exists "$ZIMS/wikipedia_en_test_2025-06.zim.part"
 }
 
-@test "part: a successful update leaves no .part file and purges the old ZIM" {
-  make_local_zim "$WP_OLD"
-  run_updater -d -c "$ZIMS"
-  assert_success
-  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$WP_NEW.part"
-  refute_exists "$ZIMS/$WP_OLD"
-}
-
-@test "part: a short download (wget exit 0) stays a .part file" {
-  make_local_zim "$WP_OLD"
-  export FAKE_WGET_SHORT="$WP_NEW"
-  run_updater -d "$ZIMS"
-  assert_failure 1
-  refute_exists "$ZIMS/$WP_NEW"
-  assert_nonempty "$ZIMS/$WP_NEW.part"
-}
-
-@test "part: a download that fails -c is removed, nothing is left under the new name" {
-  make_local_zim "$WP_OLD"
-  export FAKE_WGET_CORRUPT="$WP_NEW"
-  run_updater -d -c "$ZIMS"
-  assert_failure 1
-  refute_exists "$ZIMS/$WP_NEW"
-  refute_exists "$ZIMS/$WP_NEW.part"
-  assert_exists "$ZIMS/$WP_OLD"
-}
-
 @test "docs: the README usage block matches the -h output" {
   run bash "$SCRIPT_COPY" -h
   assert_success

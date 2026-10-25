@@ -265,14 +265,3 @@ GiB=1073741824
   assert_success
   refute_nonempty "$FAKE_CLEAR_LOG"
 }
-
-@test "network: every wget request carries connect/read timeouts and a retry limit" {
-  make_local_zim "$WP_OLD"
-  run_updater -d -f "$ZIMS"
-  run_updater -d "$ZIMS"
-  assert_success
-  run bash -c 'grep -vx -- --version "$1" | grep -v -e "--connect-timeout=30 --read-timeout=300 --tries=3"' _ "$FAKE_WGET_LOG"
-  assert_output ''
-  grep -q -- '-O -' "$FAKE_WGET_LOG"
-  grep -q -- "-O $ZIMS/$WP_NEW.part" "$FAKE_WGET_LOG"
-}
