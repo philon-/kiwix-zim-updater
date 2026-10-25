@@ -42,6 +42,7 @@ MAX_SIZE=0
 CALCULATE_CHECKSUM=0
 CHECKSUM_FILES=1
 VERIFY_LIBRARY=0
+CLEAN_PARTIALS=0 # --clean-partials: remove unfinished downloads (.part files) that can no longer be used
 FORCE_FETCH_INDEX=0
 DOWNLOAD_METHOD=1 # 1: web 2: torrent
 SKIP_PURGE=0
@@ -335,6 +336,8 @@ usage_example() {
   echo '    -c, --calculate-checksum   Verifies that the downloaded files were not corrupted, but can take a while for large downloads.'
   echo '    -p, --skip-purge           Skips purging any replaced ZIMs.'
   echo '    -l <location>, --location  Country Code to prefer mirrors from'
+  echo '    --clean-partials           Deletes unfinished downloads (.part files) whose release left the catalog or'
+  echo '                               whose finished ZIM already exists.'
   echo '    -d, --disable-dry-run      Dry-Run Override.'
   echo '                               *** Caution ***'
 
@@ -549,9 +552,9 @@ zim_is_newer() {
   [[ "$year" > "$otherYear" ]] || { [[ "$year" == "$otherYear" ]] && [[ "$month" > "$otherMonth" ]]; }
 }
 
-# cleanup_partials - Report unfinished downloads in the ZIM directory.
-# .part files are never deleted here: those that can no longer be used (release left the catalog, or the finished ZIM
-# already exists) are listed for the user to delete. Files behind a `.~lock.` marker (left by older
+# cleanup_partials - Report (and with --clean-partials remove) unfinished downloads in the ZIM directory.
+# Nothing that could still be useful is deleted: a .part file is removed only with --clean-partials, and only when its
+# release is no longer in the catalog or its finished ZIM already exists. Files behind a `.~lock.` marker (left by older
 # versions of this script, which downloaded straight into the ZIM's name) are never deleted; only a marker whose file
 # is gone is removed. In dry-run nothing is changed, the would-be actions are listed.
 cleanup_partials() {
@@ -574,8 +577,14 @@ cleanup_partials() {
       echo "Keeping interrupted download for the next run to resume: $part" >> "$LOG_FILE"
     elif [[ -f "$ZIMPath$partName" ]] || [[ " ${RemoteFiles[*]} " != *" $partName "* ]]; then
       # Useless: the finished ZIM is already there, or the release left the catalog so it can never be resumed
-      echo -e "  ${YELLOW_BOLD}Unfinished download that can no longer be used: $part (delete it if you no longer need it)${CLEAR}"
-      echo "Unfinished download that can no longer be used: $part" >> "$LOG_FILE"
+      if [[ $CLEAN_PARTIALS -eq 1 ]]; then
+        echo -e "  ${BLUE_BOLD}${simulated}Removing unfinished download that can no longer be used: $part${CLEAR}"
+        echo "${simulated}Removing unfinished download that can no longer be used: $part" >> "$LOG_FILE"
+        [[ $DEBUG -eq 0 ]] && rm -f "$part"
+      else
+        echo -e "  ${YELLOW_BOLD}Unfinished download that can no longer be used: $part (--clean-partials removes it)${CLEAR}"
+        echo "Unfinished download that can no longer be used: $part" >> "$LOG_FILE"
+      fi
     else
       echo -e "  ${YELLOW_BOLD}Keeping unfinished download for a later run to resume: $part${CLEAR}"
       echo "Keeping unfinished download for a later run to resume: $part" >> "$LOG_FILE"
@@ -736,6 +745,10 @@ main() {
         ;;
       -t | --torrent)
         DOWNLOAD_METHOD=2
+        shift
+        ;;
+      --clean-partials)
+        CLEAN_PARTIALS=1
         shift
         ;;
       -S | --no-sha)

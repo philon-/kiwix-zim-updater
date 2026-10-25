@@ -151,12 +151,62 @@ keep_copy() {
   [[ ! -e "$ZIMS/.~lock.$W" ]]
 }
 
-@test "part: a .part of a release no longer in the catalog is listed, never deleted" {
+###############################################################################
+# --clean-partials
+
+@test "clean-partials: without the flag, a .part of a release no longer in the catalog is only listed" {
   make_local_zim "$WOLD"
   printf 'partial' >"$ZIMS/wikipedia_en_test_2025-06.zim.part"
   run_updater -d "$ZIMS"
   assert_success
-  assert_output --partial "Unfinished download that can no longer be used: $ZIMS/wikipedia_en_test_2025-06.zim.part"
+  assert_output --partial "can no longer be used: $ZIMS/wikipedia_en_test_2025-06.zim.part (--clean-partials removes it)"
+  [[ -f "$ZIMS/wikipedia_en_test_2025-06.zim.part" ]]
+}
+
+@test "clean-partials: removes a .part of a release no longer in the catalog" {
+  make_local_zim "$WOLD"
+  printf 'partial' >"$ZIMS/wikipedia_en_test_2025-06.zim.part"
+  run_updater -d --clean-partials "$ZIMS"
+  assert_success
+  assert_output --partial "Removing unfinished download that can no longer be used: $ZIMS/wikipedia_en_test_2025-06.zim.part"
+  [[ ! -e "$ZIMS/wikipedia_en_test_2025-06.zim.part" ]]
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+}
+
+@test "clean-partials: removes a .part whose finished ZIM already exists, even with nothing to download" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  printf 'partial' >"$ZIMS/$W.part"
+  run_updater -d --clean-partials "$ZIMS"
+  assert_success
+  assert_output --partial 'Nothing to download'
+  [[ ! -e "$ZIMS/$W.part" ]]
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+}
+
+@test "clean-partials: keeps a .part that a later run can still resume (outside -x)" {
+  make_local_zim big_test_2025-01.zim
+  head -c 1000 "$(remote_file zim/other/big_test_2026-03.zim)" >"$ZIMS/big_test_2026-03.zim.part"
+  run_updater -d -x 2Ki --clean-partials "$ZIMS"
+  assert_success
+  assert_output --partial "Keeping unfinished download for a later run to resume: $ZIMS/big_test_2026-03.zim.part"
+  [[ -s "$ZIMS/big_test_2026-03.zim.part" ]]
+}
+
+@test "clean-partials: never touches files behind an old-style lock" {
+  make_local_zim "$WOLD"
+  keep_copy "$WOLD"
+  touch "$ZIMS/.~lock.$WOLD"
+  run_updater -d -p --clean-partials "$ZIMS"
+  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  [[ -f "$ZIMS/.~lock.$WOLD" ]]
+}
+
+@test "clean-partials: in dry-run it only lists what it would remove" {
+  make_local_zim "$WOLD"
+  printf 'partial' >"$ZIMS/wikipedia_en_test_2025-06.zim.part"
+  run_updater --clean-partials "$ZIMS"
+  assert_success
+  assert_output --partial '*** Simulated *** Removing unfinished download that can no longer be used'
   [[ -f "$ZIMS/wikipedia_en_test_2025-06.zim.part" ]]
 }
 
