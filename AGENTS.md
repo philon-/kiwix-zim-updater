@@ -25,8 +25,9 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 | `test/unit.bats` | Unit tests. They `source` the script and call its functions directly. |
 | `test/docker_entrypoint.bats` | Tests of the container entrypoint and health check, with a stub updater. No Docker needed. |
 | `test/docker-smoke.sh` | `make docker-test`: builds the image and smoke-tests it offline with the stubs. Not part of `make test`. |
+| `test/p9_library.bats` | `--library`, with a `kiwix-manage` stub (in `test/helpers/bin/`) that writes the real library format. |
 | `test/helpers/common.bash` | Shared setup. It creates a sandbox, copies the script there and prepends the stub `PATH`. |
-| `test/helpers/bin/` | Stubs for `wget`, `clear`, `git` and `df`, so tests never touch the network or the real repository, and free-space checks do not depend on the machine. |
+| `test/helpers/bin/` | Stubs for `wget`, `clear`, `git`, `df` and `kiwix-manage`, so tests never touch the network or the real repository, and free-space checks do not depend on the machine. |
 | `test/fixtures/` | A fake catalog, `.meta4` files and payloads served by the `wget` stub. `build.sh` regenerates them. |
 | `test/libs/` | Pinned git submodules for bats-core, bats-support and bats-assert. |
 | `Dockerfile`, `.dockerignore` | The container image (`debian:trixie-slim`, non-root, `tini`). |

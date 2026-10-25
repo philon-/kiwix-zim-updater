@@ -18,7 +18,7 @@ LABEL org.opencontainers.image.title="kiwix-zim-updater" \
 # util-linux, wget with CA certificates, and tini as PID 1. No git: the image never updates itself (-U).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        bash coreutils grep util-linux wget ca-certificates tini \
+        bash coreutils grep util-linux wget ca-certificates tini kiwix-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Unprivileged user. Run the container with --user (compose: user:) to match the owner of your ZIM directory.

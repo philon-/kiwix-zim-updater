@@ -172,7 +172,8 @@ Booleans accept `true`, `false`, `1`, `0`, `yes` and `no` in any case; an empty 
 | `VERIFY_LIBRARY` | `false` | `-f` | Not with `DOWNLOAD_METHOD=torrent` (exit 2). |
 | `NO_SHA` | `false` | `-S` | Do not write `.sha256` files. |
 | `MIN_SIZE`, `MAX_SIZE` | empty | `-n <v>`, `-x <v>` | Sizes like `500M` or `10G`. |
-| `MIN_FREE_SPACE` | empty | `--min-free <v>` | Free space to keep in the ZIM directory after a download; empty uses the script's default. |
+| `MIN_FREE_SPACE` | empty | `--min-free <v>` | Free space to keep in the ZIM directory after a download; empty uses the script's default (1Gi). |
+| `LIBRARY_XML` | empty | `--library <v>` | Library file for `kiwix-serve --monitorLibrary`, e.g. `/data/library.xml` (the compose example sets this). Empty: none. |
 | `COUNTRY` | empty | `-l <v>` | Two-letter mirror country code, e.g. `DE`. |
 | `DOWNLOAD_METHOD` | `web` | `-w` or `-t` | `web` or `torrent`. |
 | `FORCE_FETCH_INDEX` | `false` | `-g` | Fetch the catalog on every run. |
@@ -198,7 +199,7 @@ The image's `HEALTHCHECK` runs `healthcheck.sh` every 5 minutes. The container i
 
 ### Serving the library with kiwix-serve
 
-`compose.example.yaml` contains a commented-out `kiwix-serve` service (`ghcr.io/kiwix/kiwix-serve`) that mounts the same ZIM directory read-only. kiwix-serve keeps serving the file it opened at start-up, even after the updater replaced it, and only picks up updated or new ZIMs after a restart, for example from a cron job after the update window. Unfinished downloads are `.part` files, which kiwix-serve never sees.
+`compose.example.yaml` sets `LIBRARY_XML: "/data/library.xml"` and contains a commented-out `kiwix-serve` service (`ghcr.io/kiwix/kiwix-serve`) that mounts the same ZIM directory read-only and runs `--library --monitorLibrary /data/library.xml`. kiwix-serve then picks up every update within seconds, without a restart (see [Keeping kiwix-serve up to date](#keeping-kiwix-serve-up-to-date)). Until the updater's first run with `DRY_RUN=false` has written the library file, kiwix-serve exits at start-up and `restart: unless-stopped` keeps restarting it; that is expected.
 
 ### During an internet outage
 

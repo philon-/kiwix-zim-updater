@@ -124,6 +124,13 @@ else
   fail "MIN_FREE_SPACE run exit $status"; echo "$out" | tail -20
 fi
 
+echo "== kiwix-manage is in the image (for LIBRARY_XML)"
+if "$ENGINE" run "${run_opts[@]}" --network none --entrypoint sh "$IMAGE" -c 'command -v kiwix-manage && command -v cmp' >/dev/null 2>&1; then
+  pass "kiwix-manage and cmp present"
+else
+  fail "kiwix-manage or cmp missing from the image"
+fi
+
 echo "== Healthcheck after the run"
 if "$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" -v "$TMP/state:/state:z" --entrypoint healthcheck.sh "$IMAGE"; then
   pass "healthy after exit 0"

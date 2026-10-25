@@ -70,6 +70,11 @@ services:
       # would go below it is skipped and the old ZIM kept, e.g. 50G. Default: empty, the updater's own default (1Gi).
       MIN_FREE_SPACE: ""
 
+      # Keep a kiwix library file listing the verified ZIMs up to date (--library), for kiwix-serve
+      # --library --monitorLibrary (see the kiwix-serve service below), which then picks up updated ZIMs by itself,
+      # without a restart. Keep it in the ZIM directory: its paths are relative to it. Empty: no library file.
+      LIBRARY_XML: "/data/library.xml"
+
       # Two-letter upper-case country code to prefer download mirrors from (-l), e.g. DE. Default: empty, Kiwix
       # picks the mirror.
       COUNTRY: ""
@@ -89,16 +94,18 @@ services:
       ZIM_DIR: "/data"
       STATE_DIR: "/state"
 
-  # Optional: serve the same library with kiwix-serve. It mounts the ZIM directory read-only.
-  # kiwix-serve keeps serving the file it opened at start-up, also after the updater replaced it, and only picks up
-  # updated or new ZIMs after a restart (e.g. `docker compose restart kiwix-serve` from a cron job after the update
-  # window). Unfinished downloads are <name>.zim.part files, which kiwix-serve never sees.
+  # Optional: serve the library with kiwix-serve, mounting the ZIM directory read-only. It reads the library file
+  # that the updater maintains (LIBRARY_XML above) and reloads it within seconds after every update: a new ZIM is
+  # listed before the old one is purged, and unfinished downloads (.part files) are never listed.
+  # kiwix-serve exits while the library file does not exist yet: the updater writes it on its first run with
+  # DRY_RUN=false, and until then `restart: unless-stopped` keeps restarting kiwix-serve. That is expected.
+  # Tested with ghcr.io/kiwix/kiwix-serve 3.8.2.
   #
   # kiwix-serve:
   #   image: ghcr.io/kiwix/kiwix-serve:latest   # pin a version tag for unattended use
   #   container_name: kiwix-serve
   #   restart: unless-stopped
-  #   command: "*.zim"
+  #   command: --library --monitorLibrary /data/library.xml
   #   ports:
   #     - "8080:8080"
   #   volumes:

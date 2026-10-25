@@ -5,7 +5,7 @@
 bats_require_minimum_version 1.5.0
 
 ENTRYPOINT_ENV_VARS=(ZIM_DIR STATE_DIR DRY_RUN CHECKSUM VERIFY_LIBRARY SKIP_PURGE NO_SHA CLEAN_PARTIALS MIN_SIZE MAX_SIZE
-  MIN_FREE_SPACE COUNTRY DOWNLOAD_METHOD FORCE_FETCH_INDEX RUN_INTERVAL EXTRA_ARGS KIWIX_ZIM_UPDATER)
+  MIN_FREE_SPACE COUNTRY LIBRARY_XML DOWNLOAD_METHOD FORCE_FETCH_INDEX RUN_INTERVAL EXTRA_ARGS KIWIX_ZIM_UPDATER)
 
 setup() {
   load 'helpers/common'
@@ -115,10 +115,10 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
 
 @test "entrypoint: each variable maps to its option" {
   run_once CHECKSUM=no VERIFY_LIBRARY=yes SKIP_PURGE=1 NO_SHA=true CLEAN_PARTIALS=false FORCE_FETCH_INDEX=yes \
-    MIN_SIZE=1M MAX_SIZE=2Gi MIN_FREE_SPACE=50G COUNTRY=DE ZIM_DIR=/zims
+    MIN_SIZE=1M MAX_SIZE=2Gi MIN_FREE_SPACE=50G COUNTRY=DE LIBRARY_XML=/zims/library.xml ZIM_DIR=/zims
   [[ "$ENTRY_STATUS" -eq 0 ]]
   run stub_args
-  assert_output '<-w> <-f> <-p> <-S> <-g> <-n> <1M> <-x> <2Gi> <--min-free> <50G> <-l> <DE> </zims>'
+  assert_output '<-w> <-f> <-p> <-S> <-g> <-n> <1M> <-x> <2Gi> <--min-free> <50G> <-l> <DE> <--library> </zims/library.xml> </zims>'
 }
 
 @test "entrypoint: CHECKSUM=false drops -c and CLEAN_PARTIALS=false drops --clean-partials" {
@@ -128,7 +128,7 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
 }
 
 @test "entrypoint: empty size, free-space and country variables add nothing" {
-  run_once MIN_SIZE= MAX_SIZE= MIN_FREE_SPACE= COUNTRY= EXTRA_ARGS=
+  run_once MIN_SIZE= MAX_SIZE= MIN_FREE_SPACE= COUNTRY= LIBRARY_XML= EXTRA_ARGS=
   run stub_args
   assert_output '<-w> <-c> <--clean-partials> </data>'
 }

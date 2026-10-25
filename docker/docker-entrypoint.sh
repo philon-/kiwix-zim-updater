@@ -122,6 +122,7 @@ build_args() {
   [[ -n "${MAX_SIZE:-}" ]] && updater_args+=(-x "$MAX_SIZE")
   [[ -n "${MIN_FREE_SPACE:-}" ]] && updater_args+=(--min-free "$MIN_FREE_SPACE")
   [[ -n "${COUNTRY:-}" ]] && updater_args+=(-l "$COUNTRY")
+  [[ -n "${LIBRARY_XML:-}" ]] && updater_args+=(--library "$LIBRARY_XML")
   updater_args+=("${extra[@]}" "${ZIM_DIR:-/data}")
 }
 
