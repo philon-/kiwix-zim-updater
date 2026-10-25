@@ -489,3 +489,24 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
   run "$HEALTHCHECK"
   assert_success
 }
+
+@test "compose.example.yaml documents exactly the variables the entrypoint reads" {
+  local name documented=() missing=()
+  # The keys of the updater's environment: block (the kiwix-serve example below it is commented out)
+  mapfile -t documented < <(awk '/^    environment:$/ { e = 1; next } e && /^    [^ ]/ { e = 0 }
+    e && match($0, /^      [A-Z][A-Z0-9_]*:/) { print substr($0, 7, RLENGTH - 7) }' "$REPO_ROOT/compose.example.yaml")
+  [[ ${#documented[@]} -gt 10 ]]
+  for name in "${documented[@]}"; do
+    # Read by the entrypoint (outside a comment), and unset before each test here so that none leaks in
+    grep -v '^[[:space:]]*#' "$REPO_ROOT/docker/docker-entrypoint.sh" | grep -qw "$name" ||
+      missing+=("$name: not in docker-entrypoint.sh")
+    [[ " ${ENTRYPOINT_ENV_VARS[*]} " == *" $name "* ]] || missing+=("$name: not in ENTRYPOINT_ENV_VARS")
+  done
+  # And the other way round: every variable but the test hook KIWIX_ZIM_UPDATER is documented
+  for name in "${ENTRYPOINT_ENV_VARS[@]}"; do
+    [[ "$name" == KIWIX_ZIM_UPDATER || " ${documented[*]} " == *" $name "* ]] ||
+      missing+=("$name: not in compose.example.yaml")
+  done
+  run printf '%s\n' "${missing[@]}"
+  assert_output ''
+}
