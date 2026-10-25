@@ -14,21 +14,23 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 |---|---|
 | `kiwix-zim-updater.sh` | The script. |
 | `test/*.bats` | bats-core test suites. |
-| `test/cli.bats`, `test/update_detection.bats`, `test/download.bats`, `test/verify.bats` | Characterization tests that pin the behaviour of the script. |
-| `test/known_bugs.bats` | One regression test per review finding (F, H, M, N IDs). |
+| `test/cli.bats` | `-h`, `-v` and the banner, the ZIM directory argument, option and value validation (exit 2), and the README usage sync. |
+| `test/catalog.bats` | Fetching the catalog, the `kiwix-index` cache and `-g`, and catalogs that cannot be used. |
+| `test/detection.bats` | Listing the local ZIMs, matching them to the catalog and comparing release dates. |
+| `test/download.bats` | Dry-run, downloading and purging, `-c`, failed downloads, `-n`/`-x`, `-t`, mirrors and the wget options. |
+| `test/partials.bats` | `.part` staging and resuming, partials left by older versions, size limits on resumes and `--clean-partials`. |
+| `test/verify.bats` | `-f` against published and cached checksums, and `-S`. |
+| `test/safety.bats` | Unattended safety: the `--min-free` reserve, metadata and internet outages, a read-only ZIM directory, locking, and globals that must not leak in from the environment. |
+| `test/dependencies.bats` | The dependency check, including when git and kiwix-manage are required. |
+| `test/selfupdate.bats` | The opt-in self-update (`-U`), against throwaway repositories inside the sandbox. |
+| `test/library.bats` | `--library`, with a `kiwix-manage` stub (in `test/helpers/bin/`) that writes the real library format. |
 | `test/stubs.bats` | Self-tests for the stubs and the fixtures. |
-| `test/p2_cli.bats`, `test/p2_ops.bats`, `test/p2_hygiene.bats` | Phase 2: exit codes and argument validation, dependency check, locking and index caching, global initialisation, ZIM listing and `-S`. |
-| `test/p3_*.bats` | Phase 3: structure (`main()` and the source guard), the legacy-name removal and the opt-in self-update. |
-| `test/p5_review.bats` | Regression tests for the independent reviews' findings. |
-| `test/p6_followups.bats`, `test/p7_partials.bats` | Follow-ups: size limits on resumes, checksum-file timing, `.part` staging and the cleanup of unfinished downloads. |
-| `test/p8_unattended.bats` | Unattended safety: network limits, the `--min-free` reserve, and that an internet outage leaves the ZIM directory unchanged. |
-| `test/unit.bats` | Unit tests. They `source` the script and call its functions directly. |
+| `test/unit.bats` | Unit tests. They `source` the script and call its functions directly, and check that sourcing has no side effects. |
 | `test/docker_entrypoint.bats` | Tests of the container entrypoint and health check, with a stub updater. No Docker needed. |
 | `test/docker-smoke.sh` | `make docker-test`: smoke-tests the image (built first by `make docker-build`) offline with the stubs. Not part of `make test`. |
 | `test/library-integration.sh` | `make library-test`: `--library` end to end with real ZIMs (built with zimwriterfs), the image's kiwix-manage and the official kiwix-serve image. Not part of `make test`. |
 | `test/makefile.bats` | The Makefile's tool selection (`make -n` only). |
-| `test/p9_library.bats` | `--library`, with a `kiwix-manage` stub (in `test/helpers/bin/`) that writes the real library format. |
-| `test/helpers/common.bash` | Shared setup. It creates a sandbox, copies the script there and prepends the stub `PATH`. |
+| `test/helpers/common.bash` | Shared setup and helpers. It creates a sandbox, copies the script there and prepends the stub `PATH`. It also names the fixtures (`WP_NEW`, `WP_OLD`, ...) and holds the shared assertions, such as `assert_zim_unchanged`. |
 | `test/helpers/container.bash` | Shared setup of `test/docker-smoke.sh` and `test/library-integration.sh`: container engine, image check, checks and cleanup. |
 | `test/helpers/bin/` | Stubs for `wget`, `clear`, `git`, `df` and `kiwix-manage`, so tests never touch the network or the real repository, and free-space checks do not depend on the machine. |
 | `test/fixtures/` | A fake catalog, `.meta4` files and payloads served by the `wget` stub. `build.sh` regenerates them. |
