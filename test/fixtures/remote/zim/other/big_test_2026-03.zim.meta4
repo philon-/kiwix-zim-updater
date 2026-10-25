@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metalink xmlns="urn:ietf:params:xml:ns:metalink">
+  <generator>MirrorBrain/2.19.0</generator>
+  <origin dynamic="true">https://download.kiwix.test/zim/other/big_test_2026-03.zim.meta4</origin>
+  <published>2026-03-10T00:00:00Z</published>
+  <publisher>
+    <name>Kiwix project</name>
+    <url>https://kiwix.org</url>
+  </publisher>
+
+  <file name="big_test_2026-03.zim">
+    <size>16384</size>
+
+    <!-- internal id: 4 -->
+    <hash type="md5">b82b80d549be123c1f53843429a95075</hash>
+    <hash type="sha-1">9e7b9efd7d1d844d4e02f131be9c393813fde7b3</hash>
+    <hash type="sha-256">cc24f4e2bf9a92c77cf1c0d0524e6d92e07b832b742b29d775d82a09bdf53da3</hash>
+    <pieces length="4194304" type="sha-1">
+      <hash>9e7b9efd7d1d844d4e02f131be9c393813fde7b3</hash>
+    </pieces>
+
+    <!-- Mirrors which handle this country (TEST): -->
+    <url location="se" priority="1">https://mirror.kiwix.test/zim/other/big_test_2026-03.zim</url>
+
+    <!-- Mirrors in the rest of the world: -->
+    <url location="fr" priority="2">https://download.kiwix.test/zim/other/big_test_2026-03.zim</url>
+  </file>
+</metalink>

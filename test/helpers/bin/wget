@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# Test stub for wget. It never touches the network.
+#
+# URL mapping (any query string is stripped first):
+#   - a URL containing "opds"  -> $FAKE_FIXTURES/catalog.xml, with every
+#                                 "__NOW__" replaced by the current UTC time
+#   - scheme://host/<path>     -> $FAKE_FIXTURES/remote/<path>
+# so the download host and the mirror host serve the same tree.
+#
+# Supported options: -q, -c, -S, --show-progress, --progress=..., --spider,
+# -O -, -O <file>, --version. Anything else exits 2 like a wget parse error,
+# so new wget usage in the script has to be taught to this stub explicitly.
+#
+# Every invocation is logged as one line (all arguments) to $FAKE_WGET_LOG.
+#
+# Failure knobs (environment):
+#   FAKE_WGET_FAIL=<substr>     download URL matching: write about half the
+#                               bytes to the -O file and exit 4
+#   FAKE_WGET_SHORT=<substr>    download URL matching: write about half the
+#                               bytes to the -O file but exit 0
+#   FAKE_WGET_CORRUPT=<substr>  download URL matching: write the same number
+#                               of bytes with different content, exit 0
+#   FAKE_WGET_META_FAIL=1       every .meta4 request exits 8 with no output
+#   FAKE_WGET_CATALOG_FAIL=1    the catalog request exits 4 with no output
+#   FAKE_WGET_FLAVOR=wget2      behave like GNU Wget2, which follows a
+#                               metalink by default: a .meta4 request returns
+#                               the payload it describes unless --no-metalink
+#                               is given (wget 1.x rejects --no-metalink)
+
+if [[ -n "${FAKE_WGET_LOG:-}" ]]; then
+  printf '%s\n' "$*" >>"$FAKE_WGET_LOG"
+fi
+
+flavor="${FAKE_WGET_FLAVOR:-wget1}"
+out=""
+have_out=0
+spider=0
+resume=0
+no_metalink=0
+url=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -O)
+      [[ $# -ge 2 ]] || { echo "wget stub: -O needs an argument" >&2; exit 2; }
+      out="$2"
+      have_out=1
+      shift 2
+      ;;
+    --output-document=*)
+      out="${1#*=}"
+      have_out=1
+      shift
+      ;;
+    --spider)
+      spider=1
+      shift
+      ;;
+    -c | --continue)
+      resume=1
+      shift
+      ;;
+    -q | --quiet | -S | --server-response | --show-progress | --progress=*)
+      shift
+      ;;
+    --no-metalink)
+      if [[ "$flavor" != "wget2" ]]; then
+        echo "wget: unrecognized option '--no-metalink'" >&2
+        exit 2
+      fi
+      no_metalink=1
+      shift
+      ;;
+    --version)
+      if [[ "$flavor" == "wget2" ]]; then
+        echo "GNU Wget2 2.1.0 - multithreaded metalink/file/website downloader (test stub)"
+      else
+        echo "GNU Wget 1.21.4 built on linux-gnu. (test stub)"
+      fi
+      exit 0
+      ;;
+    -*)
+      echo "wget stub: unsupported option '$1'" >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$url" ]]; then
+        echo "wget stub: more than one URL given" >&2
+        exit 2
+      fi
+      url="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$url" ]]; then
+  echo "wget: missing URL" >&2
+  exit 1
+fi
+if [[ $spider -eq 0 ]] && [[ $have_out -eq 0 ]]; then
+  echo "wget stub: downloads without -O are not supported" >&2
+  exit 2
+fi
+
+fixtures="${FAKE_FIXTURES:?FAKE_FIXTURES must be set}"
+path="${url%%\?*}"
+is_catalog=0
+is_meta4=0
+
+if [[ "$path" == *opds* ]]; then
+  is_catalog=1
+  src="$fixtures/catalog.xml"
+else
+  rel="${path#*://}"
+  rel="${rel#*/}"
+  src="$fixtures/remote/$rel"
+  [[ "$rel" == *.meta4 ]] && is_meta4=1
+fi
+
+# Wget2 follows the metalink and returns the payload it describes.
+if [[ $is_meta4 -eq 1 ]] && [[ "$flavor" == "wget2" ]] && [[ $no_metalink -eq 0 ]]; then
+  src="${src%.meta4}"
+fi
+
+if [[ $is_catalog -eq 1 ]] && [[ "${FAKE_WGET_CATALOG_FAIL:-0}" == "1" ]]; then
+  exit 4
+fi
+if [[ $is_meta4 -eq 1 ]] && [[ "${FAKE_WGET_META_FAIL:-0}" == "1" ]]; then
+  exit 8
+fi
+
+if [[ $spider -eq 1 ]]; then
+  [[ -f "$src" ]] && exit 0
+  exit 8
+fi
+
+if [[ ! -f "$src" ]]; then
+  # Real wget creates or truncates the -O target even when the request fails.
+  [[ "$out" != "-" ]] && : >"$out"
+  exit 8
+fi
+
+matches() {
+  [[ -n "$1" ]] && [[ "$url" == *"$1"* ]]
+}
+
+emit() {
+  if [[ $is_catalog -eq 1 ]]; then
+    sed "s/__NOW__/$(date -u +%Y-%m-%dT%H:%M:%SZ)/g" "$src"
+  else
+    cat "$src"
+  fi
+}
+
+if [[ "$out" == "-" ]]; then
+  emit
+  exit 0
+fi
+
+size=$(stat -c %s "$src")
+
+if matches "${FAKE_WGET_FAIL:-}"; then
+  head -c "$((size / 2))" "$src" >"$out"
+  exit 4
+fi
+if matches "${FAKE_WGET_SHORT:-}"; then
+  head -c "$((size / 2))" "$src" >"$out"
+  exit 0
+fi
+if matches "${FAKE_WGET_CORRUPT:-}"; then
+  # Rotate every byte by one: same size, guaranteed different content.
+  LC_ALL=C tr '\000-\377' '\001-\377\000' <"$src" >"$out"
+  exit 0
+fi
+
+if [[ $resume -eq 1 ]] && [[ -f "$out" ]]; then
+  have=$(stat -c %s "$out")
+  if [[ $have -lt $size ]]; then
+    tail -c "+$((have + 1))" "$src" >>"$out"
+    exit 0
+  elif [[ $have -eq $size ]]; then
+    exit 0
+  fi
+fi
+
+emit >"$out"
+exit 0
