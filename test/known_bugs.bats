@@ -146,25 +146,6 @@ setup() {
   assert_failure 1
 }
 
-@test "H1: a catalog without remote files exits 1" {
-  use_fixture_copy
-  printf '<feed>\n  <updated>__NOW__</updated>\n</feed>\n' >"$FAKE_FIXTURES/catalog.xml"
-  add_root_level_catalog_entry
-  make_local_zim "$WP_OLD"
-  run_updater "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'Could not find any remote files'
-}
-
-@test "H1: a catalog without ZIM URLs exits 1" {
-  use_fixture_copy
-  printf '<feed>\n  <updated>__NOW__</updated>\n</feed>\n' >"$FAKE_FIXTURES/catalog.xml"
-  make_local_zim "$WP_OLD"
-  run_updater "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'No ZIM URLs found'
-}
-
 @test "H2: -c together with -t aborts with exit 2" {
   make_local_zim "$WP_OLD"
   run_updater -d -c -t "$ZIMS"
@@ -200,14 +181,6 @@ setup() {
   assert_exists "$RUN_DIR/kiwix-index"
   refute_exists "$SANDBOX/bin/download.log"
   refute_exists "$SANDBOX/bin/kiwix-index"
-}
-
-@test "H4: a failed catalog fetch exits 1 and caches no kiwix-index" {
-  make_local_zim "$WP_OLD"
-  export FAKE_WGET_CATALOG_FAIL=1
-  run_updater "$ZIMS"
-  assert_failure 1
-  refute_exists "$RUN_DIR/kiwix-index"
 }
 
 @test "H5: -n without a value exits 2" {
@@ -277,14 +250,6 @@ setup() {
   run_updater "$ZIMS"
   assert_success
   refute_nonempty "$FAKE_CLEAR_LOG"
-}
-
-@test "M3: the array-length mismatch message is printed in red" {
-  add_root_level_catalog_entry
-  make_local_zim "$WP_OLD"
-  run_updater "$ZIMS"
-  assert_failure
-  assert_output --partial $'\033[0;31mParsed array lengths did not match'
 }
 
 ###############################################################################

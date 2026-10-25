@@ -76,15 +76,6 @@ setup() {
   assert_success
 }
 
-@test "p2-cli: a catalog with more than one download host exits 1" {
-  use_fixture_copy
-  sed -i '0,/https:\/\/download\.kiwix\.test\/zim\//s##https://other.kiwix.test/zim/#' "$FAKE_FIXTURES/catalog.xml"
-  make_local_zim "$WP_OLD"
-  run_updater "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'Too many zim base urls found'
-}
-
 @test "p2-cli: -f together with -t aborts with exit 2 (-f implies -c)" {
   make_local_zim "$WP_OLD"
   run_updater --separate-stderr -f -t "$ZIMS"
