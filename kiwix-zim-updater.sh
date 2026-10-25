@@ -56,6 +56,17 @@ COUNTRY_CODE="" # -l: preferred mirror country, empty for kiwix's default
 POSITIONAL_ARGS=()
 # "*** Simulated *** " in dry-run, set once the ZIM directory is known (an unwritable one forces dry-run)
 SIMULATED=""
+# Run state, set while the ZIMs are processed
+AnyDownloads=0
+# Set once any download of the run failed: the other ZIMs are still processed, but the script exits 1
+AnyDownloadFailed=0
+# Set once -f found a ZIM it could not verify, or a corrupt one it had to keep: the script exits 1
+AnyVerifyFailed=0
+# .part files of downloads that failed in this run but can be resumed: the cleanup reports them as such
+ResumableParts=()
+# ZIMs that -f verified as good in this run: a .part next to one of them is a replacement that is no longer needed
+VerifiedZIMs=()
+CountryCodeWarning="" # set by an invalid -l, shown after the screen is cleared
 # Per-file download state, reset again for every ZIM in the download loop
 DownloadFailed=0
 IsMirror=0
@@ -769,12 +780,8 @@ mirror_search() {
   fi
 }
 
-#########################
-# Begin Script Execute
-#########################
-
-main() {
-  CountryCodeWarning="" # shown after the screen is cleared
+# parse_args <arguments> - Set the options, and the ZIM directory in POSITIONAL_ARGS; exit 2 on a usage error
+parse_args() {
   while [[ $# -gt 0 ]]; do
     case $1 in
       -h | --help)
@@ -871,17 +878,10 @@ main() {
   done
 
   [[ ${#POSITIONAL_ARGS[@]} -gt 1 ]] && usage_error "Only one ZIM directory can be given, got ${#POSITIONAL_ARGS[@]}: ${POSITIONAL_ARGS[*]}"
-  set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters that we skipped earlier
+}
 
-  [[ -t 1 ]] && clear # Clear screen, but only on a terminal (under cron there is no TERM to clear)
-
-  if [[ $CALCULATE_CHECKSUM -ne 0 ]] && [[ $DOWNLOAD_METHOD -ne 1 ]]; then
-    echo -e "${RED_BOLD}Calculating Checksum not available with torrenting. Aborting.${CLEAR}" >&2
-    exit 2
-  fi
-  [[ -n "$CountryCodeWarning" ]] && echo -e "${YELLOW_BOLD}$CountryCodeWarning${CLEAR}" >&2
-
-  # Display Header
+# print_banner - Show the name, version and whether this is a dry-run
+print_banner() {
   echo "=========================================="
   echo " kiwix-zim-updater"
   echo "       download.kiwix.org ZIM Updater"
@@ -898,39 +898,12 @@ main() {
   echo
   echo "=========================================="
   echo
+}
 
-  check_dependencies
-  detect_wget_flavor
-
-  # Self-update first: after an update the new version runs again with the same arguments
-  self_update
-
-  validate_zim_dir "$1"
-  list_local_zims
-  acquire_zim_dir_lock
-  echo -e "${BLUE_BOLD}  -Building online ZIM list...${CLEAR}"
-  master_scrape
-  echo
-  match_to_catalog
-  [[ $DEBUG -eq 1 ]] && SIMULATED="*** Simulated *** "
-
-  # Pick up ZIMs added or removed by hand since the last run (writes only when something changed)
-  rebuild_library
-
-  echo
-  say "${YELLOW_BOLD}" "3. Processing ZIM(s)..."
-  echo
-
-  AnyDownloads=0
-  # Set once any download of the run failed: the other ZIMs are still processed, but the script exits 1
-  AnyDownloadFailed=0
-  # Set once -f found a ZIM it could not verify, or a corrupt one it had to keep: the script exits 1
-  AnyVerifyFailed=0
-  # .part files of downloads that failed in this run but can be resumed: the cleanup reports them as such
-  ResumableParts=()
-  # ZIMs that -f verified as good in this run: a .part next to one of them is a replacement that is no longer needed
-  VerifiedZIMs=()
-
+# plan_updates - Decide what to do with each local ZIM (LocalActionArray) and report it; sets AnyDownloads when
+# there is anything to do
+plan_updates() {
+  local i
   for ((i = 0; i < ${#LocalZIMArray[@]}; i++)); do
     RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
     FileName=${LocalZIMArray[$i]}
@@ -1040,398 +1013,414 @@ main() {
     fi
     echo
   done
+}
 
-  say "${YELLOW_BOLD}" "4. Downloading New ZIM(s)..."
-  echo
+# process_zim <index> - Verify, download and replace the local ZIM at <index>, as its action says. The stages share
+# the per-ZIM globals set by prepare_zim; a stage returns 1 when nothing more is to be done for this ZIM.
+process_zim() {
+  Action=${LocalActionArray[$1]}
+  RemoteIndex=${LocalZIMRemoteIndexArray[$1]}
+  [[ $Action -eq $ACT_NONE ]] && return 0
+  OldZIM=${LocalZIMArray[$1]}
+  prepare_zim
+  check_existing || return 0
+  echo >>"$LOG_FILE"
+  log_stamp Start
+  fetch_zim || return 0
+  verify_download
+  finish_zim
+}
 
+# prepare_zim - Reset the per-ZIM state, and work out the expected checksum (and size), the new ZIM and its paths
+prepare_zim() {
+  # Per-file state: nothing may carry over from the previous ZIM (or leak in from the environment)
+  DownloadFailed=0
+  IsMirror=0
+  DownloadURL=""
+  ExpectedSize=""
+  ExpectedHash=""
+  HashFromCache=0 # set when -f verifies against the cached .sha256 because the metadata is unavailable
 
-  # Let's Start the download process, but only if we have actual downloads to do.
-  if [[ $AnyDownloads -eq 1 ]]; then
-    for ((z = 0; z < ${#LocalZIMArray[@]}; z++)); do # Iterate through the download queue.
-      Action=${LocalActionArray[$z]}
-      RemoteIndex=${LocalZIMRemoteIndexArray[$z]}
-      [[ $Action -eq $ACT_NONE ]] && continue
+  OldZIMPath=$ZIMPath$OldZIM
 
-      # Per-file state: nothing may carry over from the previous ZIM (or leak in from the environment)
-      DownloadFailed=0
-      IsMirror=0
-      DownloadURL=""
-      ExpectedSize=""
-      ExpectedHash=""
-      HashFromCache=0 # set when -f verifies against the cached .sha256 because the metadata is unavailable
+  echo -e "${BLUE_BOLD}  Processing $OldZIM${CLEAR}"
 
-      OldZIM=${LocalZIMArray[$z]}
-      OldZIMPath=$ZIMPath$OldZIM
+  if [[ $Action -eq $ACT_VERIFY_CACHED ]] || [[ $Action -eq $ACT_VERIFY_UNLISTED ]]; then
+    # Verified against its own cached checksum only: no metadata, no download
+    ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
 
-      echo -e "${BLUE_BOLD}  Processing $OldZIM${CLEAR}"
+    NewZIM="$OldZIM"
+    NewZIMPath="$OldZIMPath"
+  elif [[ $Action -eq $ACT_VERIFY_ONLINE ]]; then
+    # Outdated ZIM: verify it against its own published checksum, not against the newer release's meta4
+    ExpectedHash=$(wget "${WGET_NET_OPTS[@]}" -q -O - "$BaseURL${RemoteCategory[$RemoteIndex]}/$OldZIM.sha256" 2>/dev/null | grep -ioP "^[0-9a-f]{64}")
 
-      if [[ $Action -eq $ACT_VERIFY_CACHED ]] || [[ $Action -eq $ACT_VERIFY_UNLISTED ]]; then
-        # Verified against its own cached checksum only: no metadata, no download
-        ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
+    NewZIM="$OldZIM"
+    NewZIMPath="$OldZIMPath"
+  else
+    mirror_search "$RemoteIndex"
 
-        NewZIM="$OldZIM"
-        NewZIMPath="$OldZIMPath"
-      elif [[ $Action -eq $ACT_VERIFY_ONLINE ]]; then
-        # Outdated ZIM: verify it against its own published checksum, not against the newer release's meta4
-        ExpectedHash=$(wget "${WGET_NET_OPTS[@]}" -q -O - "$BaseURL${RemoteCategory[$RemoteIndex]}/$OldZIM.sha256" 2>/dev/null | grep -ioP "^[0-9a-f]{64}")
+    # -f without metadata (offline, or the meta4 fetch failed): fall back to the checksum stored on an earlier run
+    if [[ $VERIFY_LIBRARY -eq 1 ]] && ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]] && [[ -f "$OldZIMPath.sha256" ]]; then
+      ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
+      HashFromCache=1
+      echo -e "${YELLOW_REGULAR}    Metadata unavailable, verifying against the cached checksum${CLEAR}"
+      echo "Metadata unavailable for $OldZIM, verifying against the cached checksum" >>"$LOG_FILE"
+    fi
 
-        NewZIM="$OldZIM"
-        NewZIMPath="$OldZIMPath"
-      else
-        mirror_search "$RemoteIndex"
-
-        # -f without metadata (offline, or the meta4 fetch failed): fall back to the checksum stored on an earlier run
-        if [[ $VERIFY_LIBRARY -eq 1 ]] && ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]] && [[ -f "$OldZIMPath.sha256" ]]; then
-          ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
-          HashFromCache=1
-          echo -e "${YELLOW_REGULAR}    Metadata unavailable, verifying against the cached checksum${CLEAR}"
-          echo "Metadata unavailable for $OldZIM, verifying against the cached checksum" >>"$LOG_FILE"
-        fi
-
-        NewZIM=${RemoteFiles[$RemoteIndex]}
-        NewZIMPath=$ZIMPath$NewZIM
-      fi
-
-
-      FilePath=$ZIMPath$NewZIM              # Set destination path with file name
-      LockFilePath="$ZIMPath.~lock.$NewZIM" # Set destination path with file name
-      TorrentFilePath="$ZIMPath$NewZIM.torrent" # Set destination path with file name
-      # Web downloads go into a .part file and only get the ZIM's name once they passed every check, so kiwix-serve
-      # (and this script) never see an unverified file under a .zim name
-      PartPath="$ZIMPath$NewZIM.part"
-      DownloadTarget=""
-
-      RequiresDownload=0
-
-      if [[ $VERIFY_LIBRARY -eq 0 ]]; then
-        if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
-          if [[ -f "$NewZIMPath" ]]; then
-            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM already exists on disk. Skipping download.${CLEAR}"
-            echo
-          elif [[ -f $TorrentFilePath ]]; then
-            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}Torrent already exists on disk. Skipping download.${CLEAR}"
-            echo
-          else
-            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}Torrent doesn't exist on disk. Downloading...${CLEAR}"
-            RequiresDownload=1
-          fi
-        elif [[ -f "$NewZIMPath" ]] && ! [[ -f "$LockFilePath" ]]; then # New ZIM already found, and no interruptions, we don't need to download it.
-          echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM already exists on disk. Skipping download.${CLEAR}"
-          echo
-        else # New ZIM not found, so we'll go ahead and download it.
-          RequiresDownload=1
-          if [[ -f $LockFilePath ]] || [[ -f "$PartPath" ]]; then
-            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM download was interrupted. Continuing...${CLEAR}"
-          else
-            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM doesn't exist on disk. Downloading...${CLEAR}"
-          fi
-          echo
-        fi
-      else
-        # lockfile implies an incomplete download (only the current catalog version, state 1, is ever downloaded)
-        if [[ $Action -eq $ACT_UPDATE ]] && [[ -f $LockFilePath ]]; then
-          echo "Incomplete download detected, resuming" >>"$LOG_FILE"
-          echo -e "${YELLOW_REGULAR}    Status: Incomplete download detected, resuming${CLEAR}"
-
-          RequiresDownload=1
-        elif [[ $Action -eq $ACT_UPDATE ]] && [[ -f $TorrentFilePath ]]; then
-          echo -e "${YELLOW_REGULAR}    Status: Torrent exists, skipping${CLEAR}"
-          echo "Skipping checksum for torrent : $OldZIM. If the download has been completed, please delete the .torrent if you want me to verify the checksum." >>"$LOG_FILE"
-        else
-          # actually verify the file
-          say "${BLUE_REGULAR}" "    Calculating checksum for : $OldZIM"
-          { [[ $Action -eq $ACT_UPDATE ]] || [[ $Action -eq $ACT_VERIFY_ONLINE ]]; } && write_checksum_file "$OldZIM" "$ExpectedHash"
-          # An unknown expected size (failed meta4 fetch) is "cannot verify", never "corrupt"
-          if [[ $Action -eq $ACT_UPDATE ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
-            if ! report_corrupt "File size verification failed"; then
-              echo
-              continue
-            fi
-            RequiresDownload=1
-            echo
-          elif [[ ${#ExpectedHash} -ne 64 ]]; then
-            echo -e "${YELLOW_BOLD}    No valid checksum available (metadata unavailable?), cannot verify $OldZIM. Skipping, file kept.${CLEAR}" && echo "Cannot verify $OldZIM: no valid checksum available, file kept" >>"$LOG_FILE"
-            AnyVerifyFailed=1
-          elif ! hash_matches "$OldZIM" "$ExpectedHash"; then
-            # we checked a very old file, but we will choose to not replace it because we cannot, so we will leave it. A regular update will purge it naturally
-            if [[ $Action -eq $ACT_VERIFY_UNLISTED ]]; then
-              echo -e "${RED_BOLD}    ✗ Checksum failed, but no online version to replace it with. File kept.${CLEAR}"
-              echo "✗ Checksum failed for $OldZIM, no online version to replace it with. File kept." >>"$LOG_FILE"
-              AnyVerifyFailed=1
-              echo
-              continue
-            elif [[ $Action -ne $ACT_UPDATE ]]; then
-              echo -e "${RED_BOLD}    ✗ Checksum failed. File kept; a normal update run (without -f) will replace it with the newer version.${CLEAR}"
-              echo "✗ Checksum failed for $OldZIM. File kept; a normal update run will replace it with the newer version." >>"$LOG_FILE"
-              AnyVerifyFailed=1
-              echo
-              continue
-            elif [[ $HashFromCache -eq 1 ]]; then
-              # Without metadata a replacement could not be verified, so deleting the file would only lose it
-              echo -e "${RED_BOLD}    ✗ Checksum failed against the cached checksum. File kept: without metadata no replacement can be verified now.${CLEAR}"
-              echo "✗ Checksum failed for $OldZIM against the cached checksum. File kept: without metadata no replacement can be verified now." >>"$LOG_FILE"
-              AnyVerifyFailed=1
-              echo
-              continue
-            fi
-            if ! report_corrupt "Checksum failed"; then
-              echo
-              continue
-            fi
-            RequiresDownload=1
-            echo
-          else
-            say "${GREEN_BOLD}" "    ✓ Status : Checksum passed"
-            VerifiedZIMs+=("$OldZIM")
-
-            log_stamp End
+    NewZIM=${RemoteFiles[$RemoteIndex]}
+    NewZIMPath=$ZIMPath$NewZIM
+  fi
 
 
-            echo
-            continue
-          fi
-          # Verified against its own checksum only (states 2, 3 and 4): there is nothing to download
-          [[ $Action -ne $ACT_UPDATE ]] && continue
-        fi
-      fi
-      echo >>"$LOG_FILE"
-      log_stamp Start
-      # Here is where we actually download the files and log to the download.log file.
-      if [[ $RequiresDownload -eq 1 ]]; then
-        [[ $IsMirror -eq 0 ]] && echo -e "${BLUE_REGULAR}    Download (direct) : $DownloadURL${CLEAR}"
-        [[ $IsMirror -eq 1 ]] && echo -e "${BLUE_REGULAR}    Download (mirror) : $DownloadURL${CLEAR}"
+  FilePath=$ZIMPath$NewZIM              # Set destination path with file name
+  LockFilePath="$ZIMPath.~lock.$NewZIM" # Set destination path with file name
+  TorrentFilePath="$ZIMPath$NewZIM.torrent" # Set destination path with file name
+  # Web downloads go into a .part file and only get the ZIM's name once they passed every check, so kiwix-serve
+  # (and this script) never see an unverified file under a .zim name
+  PartPath="$ZIMPath$NewZIM.part"
+  DownloadTarget=""
 
-        {
-          echo
-          echo "======================================================================="
-          echo "File : $NewZIM"
-          [[ $IsMirror -eq 0 ]] && echo "URL (direct) : $DownloadURL"
-          [[ $IsMirror -eq 1 ]] && echo "URL (mirror) : $DownloadURL"
-          echo
-        } >>"$LOG_FILE"
+  RequiresDownload=0
+}
 
-        if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
-          FilePath="$FilePath.torrent"
-          if [[ -f "$LockFilePath" ]]; then
-            [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
-            [[ $DEBUG -eq 1 ]] && echo "Continue Download : $FilePath" >>"$LOG_FILE"
-          elif [[ -f $FilePath ]]; then # New ZIM already found, we don't need to download it.
-            [[ $DEBUG -eq 1 ]] && echo "Download : New Torrent already exists on disk. Skipping download." >>"$LOG_FILE"
-          else # New ZIM not found, so we'll go ahead and download it.
-            [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
-            [[ $DEBUG -eq 1 ]] && echo "Download : $FilePath" >>"$LOG_FILE"
-          fi
-
-          if [[ $DownloadFailed -eq 1 ]]; then
-            AnyDownloadFailed=1
-            # wget leaves a partial or empty .torrent behind, which would be mistaken for a finished one next run
-            rm -f "$FilePath"
-            say "${RED_BOLD}" "    ✗ Status : Torrent download failed"
-            echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
-            echo
-          fi
-          continue
-        else
-          DownloadTarget="$PartPath"
-          if [[ -f "$LockFilePath" ]]; then
-            # A `.~lock.` marker comes from an older version of this script, which downloaded straight into the ZIM's
-            # name. Next to another version of the same ZIM the locked file becomes a .part file. A lone one (no other
-            # version) stays where it is, so the ZIM stays in the listing: if it already has the published size it is
-            # verified in place, otherwise the replacement is downloaded into .part and renamed over it once verified.
-            # Nothing is ever written into the locked file itself (Wget2 would append to it when a server ignores the
-            # range request).
-            if [[ -f "$NewZIMPath" ]] && ! other_local_version_exists "${Basenames[$RemoteIndex]}" "$NewZIM"; then
-              if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -eq $ExpectedSize ]] && [[ ! -e "$PartPath" ]]; then
-                DownloadTarget="$NewZIMPath"
-              fi
-            elif [[ $DEBUG -eq 0 ]]; then
-              if [[ -f "$NewZIMPath" ]] && [[ ! -e "$PartPath" ]]; then
-                mv -f "$NewZIMPath" "$PartPath" && echo "Moved interrupted download $NewZIMPath to $PartPath" >>"$LOG_FILE"
-              fi
-              [[ ! -f "$NewZIMPath" ]] && rm -f "$LockFilePath"
-            fi
-          fi
-          if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$DownloadTarget" ]] && [[ $(stat -c %s "$DownloadTarget") -gt $ExpectedSize ]] && \
-            [[ "$DownloadTarget" == "$PartPath" ]]; then
-            # A partial that is larger than published cannot be resumed: start over
-            echo -e "${YELLOW_REGULAR}    Status : $PartPath is larger than published, starting the download over${CLEAR}"
-            echo "$PartPath is larger than published, starting the download over" >>"$LOG_FILE"
-            [[ $DEBUG -eq 0 ]] && rm -f "$PartPath"
-          fi
-          # Before fetching anything: without the published size the download could never be verified, and it must
-          # not fill the file system that also holds the library (keep --min-free free afterwards)
-          SpaceProblem=""
-          if ! [[ "$ExpectedSize" =~ ^[0-9]+$ ]]; then
-            SpaceProblem="metadata unavailable, the download could not be verified"
-          elif ! [[ -f "$DownloadTarget" && $(stat -c %s "$DownloadTarget") -eq $ExpectedSize ]]; then
-            AlreadyHave=0
-            [[ -f "$DownloadTarget" ]] && [[ "$DownloadTarget" == "$PartPath" ]] && AlreadyHave=$(stat -c %s "$DownloadTarget")
-            Available=$(free_bytes "$ZIMPath")
-            if [[ "$Available" =~ ^[0-9]+$ ]] && [[ $((Available - (ExpectedSize - AlreadyHave))) -lt $MIN_FREE ]]; then
-              SpaceProblem="not enough free space: it needs $(numfmt --to=iec-i $((ExpectedSize - AlreadyHave))), $(numfmt --to=iec-i "$Available") is available and $(numfmt --to=iec-i "$MIN_FREE") must stay free (--min-free)"
-            fi
-          fi
-          if [[ -n "$SpaceProblem" ]]; then
-            if [[ $DEBUG -eq 0 ]]; then
-              echo -e "${RED_BOLD}    ✗ Status : Download skipped, $SpaceProblem. Old ZIM kept.${CLEAR}"
-              echo "✗ Status : Download of $NewZIM skipped, $SpaceProblem. Old ZIM kept." >>"$LOG_FILE"
-              DownloadFailed=1
-            else
-              echo -e "${YELLOW_BOLD}    *** Simulated *** The download would be skipped: $SpaceProblem${CLEAR}"
-            fi
-          elif [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$DownloadTarget" ]] && [[ $(stat -c %s "$DownloadTarget") -eq $ExpectedSize ]]; then
-            # The interrupted download is already complete (e.g. the run was killed while hashing it). Do not ask wget
-            # to resume it: Wget2 appends the whole body again when a server ignores the range request. Just verify it.
-            echo -e "${GREEN_REGULAR}    ✓ Status : Interrupted download is already complete, verifying it${CLEAR}"
-            echo "Interrupted download is already complete, verifying it : $DownloadTarget" >>"$LOG_FILE"
-          elif [[ -f "$DownloadTarget" ]]; then
-            [[ $DEBUG -eq 0 ]] && { download_file "$DownloadTarget" "$DownloadURL" || DownloadFailed=1; } # Resume
-            [[ $DEBUG -eq 1 ]] && echo "Continue Download : $DownloadTarget" >>"$LOG_FILE"
-          else
-            [[ $DEBUG -eq 0 ]] && { download_file "$DownloadTarget" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
-            [[ $DEBUG -eq 1 ]] && echo "Download : $DownloadTarget" >>"$LOG_FILE"
-          fi
-        fi
-      fi
-
-      # The file to verify: what this run downloaded (a .part file, or a lone legacy download finished in place), or
-      # the new ZIM that was already on disk
-      CheckPath="$NewZIMPath"
-      [[ -n "$DownloadTarget" ]] && CheckPath="$DownloadTarget"
-      CheckName="${CheckPath##*/}"
-
-      [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -eq 1 ]] && say "${RED_BOLD}" "    ✗ Status : Download failed"
-
-      # Never purge on an unverified file: whatever we downloaded, or are about to replace the old ZIM with, must match
-      # the size published in the meta4. The catalog length is rounded to whole KiB, so it is no substitute.
-      if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
-        ActualSize=$(stat -c %s "$CheckPath" 2>/dev/null)
-        if ! [[ "$ExpectedSize" =~ ^[0-9]+$ ]]; then
-          say "${RED_BOLD}" "    ✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM"
-          DownloadFailed=1
-        elif [[ "$ActualSize" != "$ExpectedSize" ]]; then
-          say "${RED_BOLD}" "    ✗ Status : File size verification failed (expected $ExpectedSize, found ${ActualSize:-no file})"
-          DownloadFailed=1
-        fi
-      fi
-
-      # In -f mode a file that was not (re-)downloaded has already been verified above
-      if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
-        echo -e "${BLUE_REGULAR}    Calculating checksum for : $CheckPath${CLEAR}"
-        # The size was already verified above for every real download; the checksum is what -c adds
-        if ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]]; then
-          # -c promises a checksum-verified replacement: without a published sha256 the old ZIM must stay
-          if [[ $DEBUG -eq 0 ]]; then
-            say "${RED_BOLD}" "    ✗ No valid sha256 published for $NewZIM, cannot verify its checksum. Old ZIM kept."
-            DownloadFailed=1
-          else
-            echo -e "${YELLOW_BOLD}    *** Simulated *** No valid sha256 published for $NewZIM, the checksum could not be verified${CLEAR}"
-          fi
-        elif [[ $DEBUG -eq 1 ]]; then
-          echo -e "${GREEN_BOLD}    ✓ *** Simulated *** Checksum passed${CLEAR}"
-        elif ! hash_matches "$CheckName" "$ExpectedHash"; then
-          if [[ "$CheckPath" == "$NewZIMPath" ]] && [[ -f "$LockFilePath" ]]; then
-            # A lone locked file of an older version of this script: keep it (it is the only copy of this ZIM) and turn
-            # it into a normal ZIM, so that -f replaces it the usual way, verified before anything is removed
-            echo -e "${RED_BOLD}    ✗ Checksum failed for $NewZIM. It is kept; run with -f to replace it with a verified download.${CLEAR}"
-            echo "✗ Checksum failed for $NewZIM (old-style interrupted download). Kept; run with -f to replace it." >>"$LOG_FILE"
-            rm -f "$LockFilePath"
-          else
-            echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt download${CLEAR}"
-            echo "✗ Checksum failed, removing corrupt download $CheckPath" >>"$LOG_FILE"
-            rm -f "$CheckPath"
-          fi
-          DownloadFailed=1
-        else
-          echo -e "${GREEN_BOLD}    ✓ Checksum passed${CLEAR}"
-        fi
+# check_existing - Decide whether the new ZIM must be downloaded (RequiresDownload). With -f, verify the existing
+# ZIM first; returns 1 when that settles it
+check_existing() {
+  if [[ $VERIFY_LIBRARY -eq 0 ]]; then
+    if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
+      if [[ -f "$NewZIMPath" ]]; then
+        echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM already exists on disk. Skipping download.${CLEAR}"
         echo
+      elif [[ -f $TorrentFilePath ]]; then
+        echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}Torrent already exists on disk. Skipping download.${CLEAR}"
+        echo
+      else
+        echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}Torrent doesn't exist on disk. Downloading...${CLEAR}"
+        RequiresDownload=1
       fi
-
-      # A verified .part file gets the ZIM's name (in -f mode this atomically replaces the corrupt file)
-      if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && [[ "$CheckPath" == "$PartPath" ]]; then
-        if mv -f "$PartPath" "$NewZIMPath"; then
-          echo "Verified $PartPath, renamed to $NewZIMPath" >>"$LOG_FILE"
-          # List the new ZIM before the old one is purged, so kiwix-serve never lacks this title
-          rebuild_library
-        else
-          say "${RED_BOLD}" "    ✗ Status : Could not rename $PartPath to $NewZIMPath"
-          DownloadFailed=1
-        fi
-      fi
-
-      # Only a file that passed every check gets a checksum file
-      [[ $DownloadFailed -ne 1 ]] && write_checksum_file "$NewZIM" "$ExpectedHash"
-
-      echo >> "$LOG_FILE"
-      [[ $DownloadFailed -eq 1 ]] && echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
-      [[ $DownloadFailed -eq 1 ]] && AnyDownloadFailed=1
-      # A failed .part download is resumed with wget -c next run, unless it is larger than published (it cannot be)
-      if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ "$CheckPath" == "$PartPath" ]] && [[ -f "$PartPath" ]]; then
-        if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$PartPath") -gt $ExpectedSize ]]; then
-          say "${RED_BOLD}" "    ✗ Removing $PartPath: it is larger than published and cannot be resumed"
-          rm -f "$PartPath"
-        else
-          ResumableParts+=("$PartPath")
-        fi
-      fi
-
-      # In all of these cases nothing is purged: a failed download stays in its .part file to be resumed next run
-      if [[ $DownloadFailed -eq 1 ]] || [[ $SKIP_PURGE -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 1 ]]; then
-        log_stamp End
-        [[ $DEBUG -eq 0 ]] && [[ $SKIP_PURGE -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm -f "$LockFilePath"
-        [[ $DEBUG -eq 0 ]] && [[ $VERIFY_LIBRARY -eq 1 ]] && [[ $RequiresDownload -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm -f "$LockFilePath"
-        continue
-      fi
-
-      [[ $RequiresDownload -eq 1 ]] && [[ $DEBUG -eq 0 ]] && rm -f "$LockFilePath"
-
-      ########################################
-
-      say "${BLUE_REGULAR}" "    Old : $OldZIM"
-      say "${BLUE_BOLD}" "    New : $NewZIM"
-      # Check for the new ZIM on disk.
-      if [[ -f "$NewZIMPath" ]]; then # New ZIM found
-        if [[ $DEBUG -eq 0 ]]; then
-          if [[ "$OldZIMPath" == "$NewZIMPath" ]]; then
-            say "${GREEN_BOLD}" "    ✓ Status : New ZIM downloaded successfully."
-          else
-            say "${GREEN_BOLD}" "    ✓ Status : New ZIM downloaded successfully. Old ZIM purged."
-            [[ -f "$OldZIMPath" ]] && rm "$OldZIMPath" && rm "$OldZIMPath.sha256" 2>/dev/null # Purge old ZIM
-            rebuild_library
-          fi
-        else
-          say "${GREEN_BOLD}" "    ✓ Status : *** Simulated ***"
-        fi
-      else # New ZIM not found. Something went wrong, so we will skip this purge.
-        if [[ $DEBUG -eq 0 ]]; then
-          say "${RED_BOLD}" "    ✗ Status : New ZIM failed verification. Old ZIM not purged."
-        else
-          if [[ $RequiresDownload -eq 1 ]]; then
-            say "${GREEN_BOLD}" "    ✓ Status : *** Simulated *** New zim exists, old zim purged"
-          else
-            echo -e "${YELLOW_BOLD}    ✗ Status : *** Simulated *** Zim was skipped, and will not be purged${CLEAR}"
-            echo "✗ Status : *** Simulated *** Zim not purged" >>"$LOG_FILE"
-          fi
-        fi
+    elif [[ -f "$NewZIMPath" ]] && ! [[ -f "$LockFilePath" ]]; then # New ZIM already found, and no interruptions, we don't need to download it.
+      echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM already exists on disk. Skipping download.${CLEAR}"
+      echo
+    else # New ZIM not found, so we'll go ahead and download it.
+      RequiresDownload=1
+      if [[ -f $LockFilePath ]] || [[ -f "$PartPath" ]]; then
+        echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM download was interrupted. Continuing...${CLEAR}"
+      else
+        echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM doesn't exist on disk. Downloading...${CLEAR}"
       fi
       echo
-      echo >>"$LOG_FILE"
-
-      #########################################
-
-      log_stamp End
-    done
-
+    fi
   else
-    say "${GREEN_REGULAR}" "    ✓ Download: Nothing to download."
+    # lockfile implies an incomplete download (only the current catalog version, state 1, is ever downloaded)
+    if [[ $Action -eq $ACT_UPDATE ]] && [[ -f $LockFilePath ]]; then
+      echo "Incomplete download detected, resuming" >>"$LOG_FILE"
+      echo -e "${YELLOW_REGULAR}    Status: Incomplete download detected, resuming${CLEAR}"
+
+      RequiresDownload=1
+    elif [[ $Action -eq $ACT_UPDATE ]] && [[ -f $TorrentFilePath ]]; then
+      echo -e "${YELLOW_REGULAR}    Status: Torrent exists, skipping${CLEAR}"
+      echo "Skipping checksum for torrent : $OldZIM. If the download has been completed, please delete the .torrent if you want me to verify the checksum." >>"$LOG_FILE"
+    else
+      # actually verify the file
+      say "${BLUE_REGULAR}" "    Calculating checksum for : $OldZIM"
+      { [[ $Action -eq $ACT_UPDATE ]] || [[ $Action -eq $ACT_VERIFY_ONLINE ]]; } && write_checksum_file "$OldZIM" "$ExpectedHash"
+      # An unknown expected size (failed meta4 fetch) is "cannot verify", never "corrupt"
+      if [[ $Action -eq $ACT_UPDATE ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
+        if ! report_corrupt "File size verification failed"; then
+          echo
+          return 1
+        fi
+        RequiresDownload=1
+        echo
+      elif [[ ${#ExpectedHash} -ne 64 ]]; then
+        echo -e "${YELLOW_BOLD}    No valid checksum available (metadata unavailable?), cannot verify $OldZIM. Skipping, file kept.${CLEAR}" && echo "Cannot verify $OldZIM: no valid checksum available, file kept" >>"$LOG_FILE"
+        AnyVerifyFailed=1
+      elif ! hash_matches "$OldZIM" "$ExpectedHash"; then
+        # we checked a very old file, but we will choose to not replace it because we cannot, so we will leave it. A regular update will purge it naturally
+        if [[ $Action -eq $ACT_VERIFY_UNLISTED ]]; then
+          echo -e "${RED_BOLD}    ✗ Checksum failed, but no online version to replace it with. File kept.${CLEAR}"
+          echo "✗ Checksum failed for $OldZIM, no online version to replace it with. File kept." >>"$LOG_FILE"
+          AnyVerifyFailed=1
+          echo
+          return 1
+        elif [[ $Action -ne $ACT_UPDATE ]]; then
+          echo -e "${RED_BOLD}    ✗ Checksum failed. File kept; a normal update run (without -f) will replace it with the newer version.${CLEAR}"
+          echo "✗ Checksum failed for $OldZIM. File kept; a normal update run will replace it with the newer version." >>"$LOG_FILE"
+          AnyVerifyFailed=1
+          echo
+          return 1
+        elif [[ $HashFromCache -eq 1 ]]; then
+          # Without metadata a replacement could not be verified, so deleting the file would only lose it
+          echo -e "${RED_BOLD}    ✗ Checksum failed against the cached checksum. File kept: without metadata no replacement can be verified now.${CLEAR}"
+          echo "✗ Checksum failed for $OldZIM against the cached checksum. File kept: without metadata no replacement can be verified now." >>"$LOG_FILE"
+          AnyVerifyFailed=1
+          echo
+          return 1
+        fi
+        if ! report_corrupt "Checksum failed"; then
+          echo
+          return 1
+        fi
+        RequiresDownload=1
+        echo
+      else
+        say "${GREEN_BOLD}" "    ✓ Status : Checksum passed"
+        VerifiedZIMs+=("$OldZIM")
+
+        log_stamp End
+
+
+        echo
+        return 1
+      fi
+      # Verified against its own checksum only (states 2, 3 and 4): there is nothing to download
+      [[ $Action -ne $ACT_UPDATE ]] && return 1
+    fi
+  fi
+  return 0
+}
+
+# fetch_zim - Download (or resume) the new ZIM into its .part file, or the torrent with -t; returns 1 for a torrent,
+# which is all there is to do
+fetch_zim() {
+  # Here is where we actually download the files and log to the download.log file.
+  if [[ $RequiresDownload -eq 1 ]]; then
+    [[ $IsMirror -eq 0 ]] && echo -e "${BLUE_REGULAR}    Download (direct) : $DownloadURL${CLEAR}"
+    [[ $IsMirror -eq 1 ]] && echo -e "${BLUE_REGULAR}    Download (mirror) : $DownloadURL${CLEAR}"
+
+    {
+      echo
+      echo "======================================================================="
+      echo "File : $NewZIM"
+      [[ $IsMirror -eq 0 ]] && echo "URL (direct) : $DownloadURL"
+      [[ $IsMirror -eq 1 ]] && echo "URL (mirror) : $DownloadURL"
+      echo
+    } >>"$LOG_FILE"
+
+    if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
+      FilePath="$FilePath.torrent"
+      if [[ -f "$LockFilePath" ]]; then
+        [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
+        [[ $DEBUG -eq 1 ]] && echo "Continue Download : $FilePath" >>"$LOG_FILE"
+      elif [[ -f $FilePath ]]; then # New ZIM already found, we don't need to download it.
+        [[ $DEBUG -eq 1 ]] && echo "Download : New Torrent already exists on disk. Skipping download." >>"$LOG_FILE"
+      else # New ZIM not found, so we'll go ahead and download it.
+        [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
+        [[ $DEBUG -eq 1 ]] && echo "Download : $FilePath" >>"$LOG_FILE"
+      fi
+
+      if [[ $DownloadFailed -eq 1 ]]; then
+        AnyDownloadFailed=1
+        # wget leaves a partial or empty .torrent behind, which would be mistaken for a finished one next run
+        rm -f "$FilePath"
+        say "${RED_BOLD}" "    ✗ Status : Torrent download failed"
+        echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
+        echo
+      fi
+      return 1
+    else
+      DownloadTarget="$PartPath"
+      if [[ -f "$LockFilePath" ]]; then
+        # A `.~lock.` marker comes from an older version of this script, which downloaded straight into the ZIM's
+        # name. Next to another version of the same ZIM the locked file becomes a .part file. A lone one (no other
+        # version) stays where it is, so the ZIM stays in the listing: if it already has the published size it is
+        # verified in place, otherwise the replacement is downloaded into .part and renamed over it once verified.
+        # Nothing is ever written into the locked file itself (Wget2 would append to it when a server ignores the
+        # range request).
+        if [[ -f "$NewZIMPath" ]] && ! other_local_version_exists "${Basenames[$RemoteIndex]}" "$NewZIM"; then
+          if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -eq $ExpectedSize ]] && [[ ! -e "$PartPath" ]]; then
+            DownloadTarget="$NewZIMPath"
+          fi
+        elif [[ $DEBUG -eq 0 ]]; then
+          if [[ -f "$NewZIMPath" ]] && [[ ! -e "$PartPath" ]]; then
+            mv -f "$NewZIMPath" "$PartPath" && echo "Moved interrupted download $NewZIMPath to $PartPath" >>"$LOG_FILE"
+          fi
+          [[ ! -f "$NewZIMPath" ]] && rm -f "$LockFilePath"
+        fi
+      fi
+      if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$DownloadTarget" ]] && [[ $(stat -c %s "$DownloadTarget") -gt $ExpectedSize ]] && \
+        [[ "$DownloadTarget" == "$PartPath" ]]; then
+        # A partial that is larger than published cannot be resumed: start over
+        echo -e "${YELLOW_REGULAR}    Status : $PartPath is larger than published, starting the download over${CLEAR}"
+        echo "$PartPath is larger than published, starting the download over" >>"$LOG_FILE"
+        [[ $DEBUG -eq 0 ]] && rm -f "$PartPath"
+      fi
+      # Before fetching anything: without the published size the download could never be verified, and it must
+      # not fill the file system that also holds the library (keep --min-free free afterwards)
+      SpaceProblem=""
+      if ! [[ "$ExpectedSize" =~ ^[0-9]+$ ]]; then
+        SpaceProblem="metadata unavailable, the download could not be verified"
+      elif ! [[ -f "$DownloadTarget" && $(stat -c %s "$DownloadTarget") -eq $ExpectedSize ]]; then
+        AlreadyHave=0
+        [[ -f "$DownloadTarget" ]] && [[ "$DownloadTarget" == "$PartPath" ]] && AlreadyHave=$(stat -c %s "$DownloadTarget")
+        Available=$(free_bytes "$ZIMPath")
+        if [[ "$Available" =~ ^[0-9]+$ ]] && [[ $((Available - (ExpectedSize - AlreadyHave))) -lt $MIN_FREE ]]; then
+          SpaceProblem="not enough free space: it needs $(numfmt --to=iec-i $((ExpectedSize - AlreadyHave))), $(numfmt --to=iec-i "$Available") is available and $(numfmt --to=iec-i "$MIN_FREE") must stay free (--min-free)"
+        fi
+      fi
+      if [[ -n "$SpaceProblem" ]]; then
+        if [[ $DEBUG -eq 0 ]]; then
+          echo -e "${RED_BOLD}    ✗ Status : Download skipped, $SpaceProblem. Old ZIM kept.${CLEAR}"
+          echo "✗ Status : Download of $NewZIM skipped, $SpaceProblem. Old ZIM kept." >>"$LOG_FILE"
+          DownloadFailed=1
+        else
+          echo -e "${YELLOW_BOLD}    *** Simulated *** The download would be skipped: $SpaceProblem${CLEAR}"
+        fi
+      elif [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$DownloadTarget" ]] && [[ $(stat -c %s "$DownloadTarget") -eq $ExpectedSize ]]; then
+        # The interrupted download is already complete (e.g. the run was killed while hashing it). Do not ask wget
+        # to resume it: Wget2 appends the whole body again when a server ignores the range request. Just verify it.
+        echo -e "${GREEN_REGULAR}    ✓ Status : Interrupted download is already complete, verifying it${CLEAR}"
+        echo "Interrupted download is already complete, verifying it : $DownloadTarget" >>"$LOG_FILE"
+      elif [[ -f "$DownloadTarget" ]]; then
+        [[ $DEBUG -eq 0 ]] && { download_file "$DownloadTarget" "$DownloadURL" || DownloadFailed=1; } # Resume
+        [[ $DEBUG -eq 1 ]] && echo "Continue Download : $DownloadTarget" >>"$LOG_FILE"
+      else
+        [[ $DEBUG -eq 0 ]] && { download_file "$DownloadTarget" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
+        [[ $DEBUG -eq 1 ]] && echo "Download : $DownloadTarget" >>"$LOG_FILE"
+      fi
+    fi
+  fi
+  return 0
+}
+
+# verify_download - Check the size (and with -c the checksum) of the new ZIM, then give a verified .part file the
+# ZIM's name. Sets DownloadFailed when anything does not match.
+verify_download() {
+  # The file to verify: what this run downloaded (a .part file, or a lone legacy download finished in place), or
+  # the new ZIM that was already on disk
+  CheckPath="$NewZIMPath"
+  [[ -n "$DownloadTarget" ]] && CheckPath="$DownloadTarget"
+  CheckName="${CheckPath##*/}"
+
+  [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -eq 1 ]] && say "${RED_BOLD}" "    ✗ Status : Download failed"
+
+  # Never purge on an unverified file: whatever we downloaded, or are about to replace the old ZIM with, must match
+  # the size published in the meta4. The catalog length is rounded to whole KiB, so it is no substitute.
+  if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
+    ActualSize=$(stat -c %s "$CheckPath" 2>/dev/null)
+    if ! [[ "$ExpectedSize" =~ ^[0-9]+$ ]]; then
+      say "${RED_BOLD}" "    ✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM"
+      DownloadFailed=1
+    elif [[ "$ActualSize" != "$ExpectedSize" ]]; then
+      say "${RED_BOLD}" "    ✗ Status : File size verification failed (expected $ExpectedSize, found ${ActualSize:-no file})"
+      DownloadFailed=1
+    fi
+  fi
+
+  # In -f mode a file that was not (re-)downloaded has already been verified above
+  if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
+    echo -e "${BLUE_REGULAR}    Calculating checksum for : $CheckPath${CLEAR}"
+    # The size was already verified above for every real download; the checksum is what -c adds
+    if ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]]; then
+      # -c promises a checksum-verified replacement: without a published sha256 the old ZIM must stay
+      if [[ $DEBUG -eq 0 ]]; then
+        say "${RED_BOLD}" "    ✗ No valid sha256 published for $NewZIM, cannot verify its checksum. Old ZIM kept."
+        DownloadFailed=1
+      else
+        echo -e "${YELLOW_BOLD}    *** Simulated *** No valid sha256 published for $NewZIM, the checksum could not be verified${CLEAR}"
+      fi
+    elif [[ $DEBUG -eq 1 ]]; then
+      echo -e "${GREEN_BOLD}    ✓ *** Simulated *** Checksum passed${CLEAR}"
+    elif ! hash_matches "$CheckName" "$ExpectedHash"; then
+      if [[ "$CheckPath" == "$NewZIMPath" ]] && [[ -f "$LockFilePath" ]]; then
+        # A lone locked file of an older version of this script: keep it (it is the only copy of this ZIM) and turn
+        # it into a normal ZIM, so that -f replaces it the usual way, verified before anything is removed
+        echo -e "${RED_BOLD}    ✗ Checksum failed for $NewZIM. It is kept; run with -f to replace it with a verified download.${CLEAR}"
+        echo "✗ Checksum failed for $NewZIM (old-style interrupted download). Kept; run with -f to replace it." >>"$LOG_FILE"
+        rm -f "$LockFilePath"
+      else
+        echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt download${CLEAR}"
+        echo "✗ Checksum failed, removing corrupt download $CheckPath" >>"$LOG_FILE"
+        rm -f "$CheckPath"
+      fi
+      DownloadFailed=1
+    else
+      echo -e "${GREEN_BOLD}    ✓ Checksum passed${CLEAR}"
+    fi
     echo
   fi
 
-  cleanup_partials
-  # Anything else that changed the set of finished ZIMs (e.g. an old-style lock that was resolved)
-  rebuild_library
+  # A verified .part file gets the ZIM's name (in -f mode this atomically replaces the corrupt file)
+  if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && [[ "$CheckPath" == "$PartPath" ]]; then
+    if mv -f "$PartPath" "$NewZIMPath"; then
+      echo "Verified $PartPath, renamed to $NewZIMPath" >>"$LOG_FILE"
+      # List the new ZIM before the old one is purged, so kiwix-serve never lacks this title
+      rebuild_library
+    else
+      say "${RED_BOLD}" "    ✗ Status : Could not rename $PartPath to $NewZIMPath"
+      DownloadFailed=1
+    fi
+  fi
 
+  # Only a file that passed every check gets a checksum file
+  [[ $DownloadFailed -ne 1 ]] && write_checksum_file "$NewZIM" "$ExpectedHash"
+
+  echo >> "$LOG_FILE"
+  [[ $DownloadFailed -eq 1 ]] && echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
+  [[ $DownloadFailed -eq 1 ]] && AnyDownloadFailed=1
+  # A failed .part download is resumed with wget -c next run, unless it is larger than published (it cannot be)
+  if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ "$CheckPath" == "$PartPath" ]] && [[ -f "$PartPath" ]]; then
+    if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$PartPath") -gt $ExpectedSize ]]; then
+      say "${RED_BOLD}" "    ✗ Removing $PartPath: it is larger than published and cannot be resumed"
+      rm -f "$PartPath"
+    else
+      ResumableParts+=("$PartPath")
+    fi
+  fi
+}
+
+# finish_zim - Log the outcome and, once everything was verified, purge the old ZIM
+finish_zim() {
+  # In all of these cases nothing is purged: a failed download stays in its .part file to be resumed next run
+  if [[ $DownloadFailed -eq 1 ]] || [[ $SKIP_PURGE -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 1 ]]; then
+    log_stamp End
+    [[ $DEBUG -eq 0 ]] && [[ $SKIP_PURGE -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm -f "$LockFilePath"
+    [[ $DEBUG -eq 0 ]] && [[ $VERIFY_LIBRARY -eq 1 ]] && [[ $RequiresDownload -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm -f "$LockFilePath"
+    return 1
+  fi
+
+  [[ $RequiresDownload -eq 1 ]] && [[ $DEBUG -eq 0 ]] && rm -f "$LockFilePath"
+
+  ########################################
+
+  say "${BLUE_REGULAR}" "    Old : $OldZIM"
+  say "${BLUE_BOLD}" "    New : $NewZIM"
+  # Check for the new ZIM on disk.
+  if [[ -f "$NewZIMPath" ]]; then # New ZIM found
+    if [[ $DEBUG -eq 0 ]]; then
+      if [[ "$OldZIMPath" == "$NewZIMPath" ]]; then
+        say "${GREEN_BOLD}" "    ✓ Status : New ZIM downloaded successfully."
+      else
+        say "${GREEN_BOLD}" "    ✓ Status : New ZIM downloaded successfully. Old ZIM purged."
+        [[ -f "$OldZIMPath" ]] && rm "$OldZIMPath" && rm "$OldZIMPath.sha256" 2>/dev/null # Purge old ZIM
+        rebuild_library
+      fi
+    else
+      say "${GREEN_BOLD}" "    ✓ Status : *** Simulated ***"
+    fi
+  else # New ZIM not found. Something went wrong, so we will skip this purge.
+    if [[ $DEBUG -eq 0 ]]; then
+      say "${RED_BOLD}" "    ✗ Status : New ZIM failed verification. Old ZIM not purged."
+    else
+      if [[ $RequiresDownload -eq 1 ]]; then
+        say "${GREEN_BOLD}" "    ✓ Status : *** Simulated *** New zim exists, old zim purged"
+      else
+        echo -e "${YELLOW_BOLD}    ✗ Status : *** Simulated *** Zim was skipped, and will not be purged${CLEAR}"
+        echo "✗ Status : *** Simulated *** Zim not purged" >>"$LOG_FILE"
+      fi
+    fi
+  fi
+  echo
+  echo >>"$LOG_FILE"
+
+  #########################################
+
+  log_stamp End
+}
+
+# finish_run - Report what failed and exit with the status the exit-code contract asks for
+finish_run() {
   if [[ $LibraryFailed -eq 1 ]]; then
     echo -e "${RED_BOLD}✗ The library file $LIBRARY_XML could not be fully updated, see $LOG_FILE${CLEAR}"
     echo "✗ The library file $LIBRARY_XML could not be fully updated" >> "$LOG_FILE"
@@ -1452,6 +1441,63 @@ main() {
   fi
   [[ $LibraryFailed -eq 1 ]] && exit 1
   exit 0
+}
+
+main() {
+  parse_args "$@"
+  set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters that we skipped earlier
+
+  [[ -t 1 ]] && clear # Clear screen, but only on a terminal (under cron there is no TERM to clear)
+
+  if [[ $CALCULATE_CHECKSUM -ne 0 ]] && [[ $DOWNLOAD_METHOD -ne 1 ]]; then
+    echo -e "${RED_BOLD}Calculating Checksum not available with torrenting. Aborting.${CLEAR}" >&2
+    exit 2
+  fi
+  [[ -n "$CountryCodeWarning" ]] && echo -e "${YELLOW_BOLD}$CountryCodeWarning${CLEAR}" >&2
+
+  print_banner
+
+  check_dependencies
+  detect_wget_flavor
+
+  # Self-update first: after an update the new version runs again with the same arguments
+  self_update
+
+  validate_zim_dir "$1"
+  list_local_zims
+  acquire_zim_dir_lock
+  echo -e "${BLUE_BOLD}  -Building online ZIM list...${CLEAR}"
+  master_scrape
+  echo
+  match_to_catalog
+  [[ $DEBUG -eq 1 ]] && SIMULATED="*** Simulated *** "
+
+  # Pick up ZIMs added or removed by hand since the last run (writes only when something changed)
+  rebuild_library
+
+  echo
+  say "${YELLOW_BOLD}" "3. Processing ZIM(s)..."
+  echo
+
+  plan_updates
+
+  say "${YELLOW_BOLD}" "4. Downloading New ZIM(s)..."
+  echo
+
+  if [[ $AnyDownloads -eq 1 ]]; then
+    for z in "${!LocalZIMArray[@]}"; do
+      process_zim "$z"
+    done
+  else
+    say "${GREEN_REGULAR}" "    ✓ Download: Nothing to download."
+    echo
+  fi
+
+  cleanup_partials
+  # Anything else that changed the set of finished ZIMs (e.g. an old-style lock that was resolved)
+  rebuild_library
+
+  finish_run
 }
 
 # Run only when executed; when sourced (e.g. by the unit tests) just define the functions and defaults
