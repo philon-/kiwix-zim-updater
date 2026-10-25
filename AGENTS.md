@@ -26,6 +26,7 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 | `test/docker_entrypoint.bats` | Tests of the container entrypoint and health check, with a stub updater. No Docker needed. |
 | `test/docker-smoke.sh` | `make docker-test`: builds the image and smoke-tests it offline with the stubs. Not part of `make test`. |
 | `test/library-integration.sh` | `make library-test`: `--library` end to end with real ZIMs (built with zimwriterfs), the image's kiwix-manage and the official kiwix-serve image. Not part of `make test`. |
+| `test/makefile.bats` | The Makefile's tool selection (`make -n` only). |
 | `test/p9_library.bats` | `--library`, with a `kiwix-manage` stub (in `test/helpers/bin/`) that writes the real library format. |
 | `test/helpers/common.bash` | Shared setup. It creates a sandbox, copies the script there and prepends the stub `PATH`. |
 | `test/helpers/bin/` | Stubs for `wget`, `clear`, `git`, `df` and `kiwix-manage`, so tests never touch the network or the real repository, and free-space checks do not depend on the machine. |

@@ -4,11 +4,16 @@ BATS ?= test/libs/bats-core/bin/bats
 SHELLCHECK_SEVERITY ?= style
 SHELLCHECK_IMAGE ?= docker.io/koalaman/shellcheck:v0.10.0
 
-# Use a local shellcheck when available, otherwise a pinned container image.
-ifeq ($(shell command -v shellcheck 2>/dev/null),)
-SHELLCHECK ?= podman run --rm -v "$(CURDIR):/mnt:Z" -w /mnt $(SHELLCHECK_IMAGE)
+# Container engine for the ShellCheck fallback and for `make docker-test`/`make library-test` (podman if installed,
+# otherwise docker).
+CONTAINER_ENGINE ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
+
+# Use a local shellcheck when available, otherwise the pinned container image with CONTAINER_ENGINE.
+SHELLCHECK_LOCAL ?= $(shell command -v shellcheck 2>/dev/null)
+ifeq ($(SHELLCHECK_LOCAL),)
+SHELLCHECK ?= $(CONTAINER_ENGINE) run --rm -v "$(CURDIR):/mnt:Z" -w /mnt $(SHELLCHECK_IMAGE)
 else
-SHELLCHECK ?= shellcheck
+SHELLCHECK ?= $(SHELLCHECK_LOCAL)
 endif
 
 # Files checked at SHELLCHECK_SEVERITY (the script and the container scripts, default: every finding)
@@ -18,8 +23,7 @@ DOCKER_SCRIPTS := docker/docker-entrypoint.sh docker/healthcheck.sh test/docker-
 HARNESS_SCRIPTS := $(wildcard test/helpers/bin/*) $(wildcard test/fixtures/build.sh)
 HARNESS_LIBS := $(wildcard test/helpers/*.bash)
 
-# Container engine and image tag for `make docker-test` (podman if installed, otherwise docker).
-CONTAINER_ENGINE ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
+# Image tag for `make docker-test` and `make library-test`.
 IMAGE ?= localhost/kiwix-zim-updater:test
 
 .PHONY: all test lint docker-test library-test
