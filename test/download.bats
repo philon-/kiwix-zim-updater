@@ -114,7 +114,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   before="$(zim_dir_snapshot)"
   run_updater -d -n 2K "$ZIMS"
   assert_success
-  assert_output --partial 'Update skipped (minimum: 2.0Ki, download size: 1.0Ki). New version: 2025-12'
+  # numfmt prints the locale's decimal separator.
+  assert_output --regexp 'Update skipped \(minimum: 2[.,]0Ki, download size: 1[.,]0Ki\)\. New version: 2025-12'
   run wget_downloads
   assert_output ''
   [[ "$(zim_dir_snapshot)" == "$before" ]]
@@ -135,7 +136,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   before="$(zim_dir_snapshot)"
   run_updater -d -x 8K "$ZIMS"
   assert_success
-  assert_output --partial 'Update skipped (maximum: 7.9Ki, download size: 16Ki). New version: 2026-03'
+  assert_output --regexp 'Update skipped \(maximum: 7[.,]9Ki, download size: 16Ki\)\. New version: 2026-03'
   run wget_downloads
   assert_output ''
   [[ "$(zim_dir_snapshot)" == "$before" ]]
