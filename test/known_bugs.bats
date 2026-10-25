@@ -333,7 +333,6 @@ EOF
 # N: new defects found while building the harness (not in the review table)
 
 @test "N1: with GNU Wget2 the meta4 is read as metadata, not followed" {
-  skip "N1: wget2 follows metalinks by default, so MetaInfo holds the ZIM itself"
   export FAKE_WGET_FLAVOR=wget2
   make_local_zim "$OLD_WP"
   run_updater -d -c "$ZIMS"
@@ -385,4 +384,24 @@ EOF
   run_updater -f -d "$ZIMS"
   cmp "$ZIMS/$OLD_WP" "$SANDBOX/$OLD_WP.orig"
   refute_output --partial 'removing corrupt file'
+}
+
+@test "N1: with GNU Wget2 every meta4 request carries --no-metalink" {
+  export FAKE_WGET_FLAVOR=wget2
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  assert_success
+  grep -qF '.meta4' "$FAKE_WGET_LOG"
+  run bash -c 'grep -F .meta4 "$1" | grep -v -e --no-metalink' _ "$FAKE_WGET_LOG"
+  assert_output ''
+}
+
+@test "N1: with wget 1.x no meta4 request carries --no-metalink" {
+  export FAKE_WGET_FLAVOR=wget1
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS"
+  assert_success
+  grep -qF '.meta4' "$FAKE_WGET_LOG"
+  run grep -e --no-metalink "$FAKE_WGET_LOG"
+  assert_output ''
 }

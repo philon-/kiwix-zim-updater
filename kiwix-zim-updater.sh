@@ -45,6 +45,9 @@ CHECKSUM_FILES=1
 VERIFY_LIBRARY=0
 FORCE_FETCH_INDEX=0
 DOWNLOAD_METHOD=1 # 1: web 2: torrent
+# Extra wget options for .meta4 requests. GNU Wget2 follows metalinks by default and would hand us the ZIM itself
+# instead of the metadata; wget 1.x rejects --no-metalink, so this is filled in by detect_wget_flavor.
+WGET_META_OPTS=()
 # sort of a default, will be overwritten when the library is parsed. Set here to what it probably will be
 BaseURL="https://lb.download.kiwix.org/zim/"
 CatalogURL="https://opds.library.kiwix.org/catalog/v2/entries?count=-1"
@@ -385,6 +388,14 @@ flags() {
   echo -e "${GREEN_REGULAR}    ${#LocalZIMNameArray[*]} ZIM(s) found.${CLEAR}"
 }
 
+# detect_wget_flavor - GNU Wget2 follows metalinks unless told not to; wget 1.x does not know the option
+detect_wget_flavor() {
+  WGET_META_OPTS=()
+  if wget --version 2>/dev/null | head -n 1 | grep -qi 'wget2'; then
+    WGET_META_OPTS=(--no-metalink)
+  fi
+}
+
 # mirror_search - Find ZIM URL Priority #1 mirror from meta4 Function
 mirror_search() {
   IsMirror=0
@@ -394,7 +405,7 @@ mirror_search() {
 
   # If we need the checksum, we need a link  and the hash, which we can get both by using .meta4, otherwise we only need
   # Silently fetch (via wget) the associated meta4 xml and extract the mirror URL marked priority="1"
-  MetaInfo=$(wget -q -O - "$BaseURL$RemotePath.meta4?country=$COUNTRY_CODE")
+  MetaInfo=$(wget "${WGET_META_OPTS[@]}" -q -O - "$BaseURL$RemotePath.meta4?country=$COUNTRY_CODE")
   ExpectedSize=$(echo "$MetaInfo" | grep '<size>' | grep -Po '\d+')
   ExpectedHash=$(echo "$MetaInfo" | grep '<hash type="sha-256">' | grep -Poi '(?<="sha-256">)[a-f\d]{64}(?=<)')
 
@@ -524,6 +535,8 @@ echo "            DRY-RUN/SIMULATION"
 echo
 echo "=========================================="
 echo
+
+detect_wget_flavor
 
 # First, Self-Update Check.
 # Shouldnt this be first? it is not dependent on anything else and resets everything, so may as well reset it before getting all invested?

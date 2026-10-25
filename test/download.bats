@@ -28,7 +28,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   make_local_zim "$OLD_WP"
   run_updater "$ZIMS"
   assert_success
-  run cat "$FAKE_WGET_LOG"
+  # The wget flavour probe (--version) makes no request; ignore it.
+  run grep -vx -- '--version' "$FAKE_WGET_LOG"
   assert_line --index 0 --partial 'opds.library.kiwix.org'
   assert_line --index 1 --partial "$WP_REMOTE.meta4"
   refute_line --index 2 --regexp '.'
