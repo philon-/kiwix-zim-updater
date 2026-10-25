@@ -180,7 +180,6 @@ EOF
 }
 
 @test "H2: -c together with -t aborts with exit 2" {
-  skip "H2: prints 'Aborting' but carries on"
   make_local_zim "$OLD_WP"
   run_updater -d -c -t "$ZIMS"
   assert_failure 2

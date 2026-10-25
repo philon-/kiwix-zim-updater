@@ -553,7 +553,8 @@ set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters that we skipped e
 clear # Clear screen
 
 if [[ $CALCULATE_CHECKSUM -ne 0 ]] && [[ $DOWNLOAD_METHOD -ne 1 ]]; then
-  echo -e "${RED_BOLD}Calculating Checksum not available with torrenting. Aborting.${CLEAR}"
+  echo -e "${RED_BOLD}Calculating Checksum not available with torrenting. Aborting.${CLEAR}" >&2
+  exit 2
 fi
 
 # Display Header

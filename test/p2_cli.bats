@@ -90,3 +90,12 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_failure 1
   assert_output --partial 'Too many zim base urls found'
 }
+
+@test "p2-cli: -f together with -t aborts with exit 2 (-f implies -c)" {
+  make_local_zim "$OLD_WP"
+  run_updater --separate-stderr -f -t "$ZIMS"
+  assert_failure 2
+  [[ "$stderr" == *'Calculating Checksum not available with torrenting'* ]]
+  run cat "$FAKE_WGET_LOG"
+  assert_output ''
+}
