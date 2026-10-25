@@ -229,3 +229,21 @@ head_of() {
   run cat "$FAKE_GIT_LOG"
   assert_output ''
 }
+
+@test "R8: -U re-execs correctly when started as 'bash kiwix-zim-updater.sh' from inside the clone" {
+  setup_clone
+  # download.log and kiwix-index land in the clone (the CWD); ignore them like the real repository does
+  cp "$REPO_ROOT/.gitignore" "$SANDBOX/clone/.gitignore"
+  sgit -C "$SANDBOX/clone" add .gitignore
+  sgit -C "$SANDBOX/clone" commit -q -m 'ignore run files'
+  sgit -C "$SANDBOX/clone" push -q origin main
+  push_update
+  chmod a-x "$CLONE_SCRIPT"
+  sgit -C "$SANDBOX/clone" config core.fileMode false
+  make_local_zim "$OLD_WP"
+  cd "$SANDBOX/clone" || return 1
+  PATH="$SANDBOX/realgit:$PATH" run bash kiwix-zim-updater.sh -U "$ZIMS"
+  assert_success
+  assert_output --partial 'Running the updated version'
+  assert_output --partial 'v9.9-test'
+}

@@ -33,7 +33,6 @@ FileSizes=()
 SCRIPT="$(readlink -f "$0")"
 SCRIPTFILE="$(basename "$SCRIPT")"
 SCRIPTPATH="$(dirname "$SCRIPT")"
-CALLEDSCRIPTNAME="$0"
 ARGS=("$@")
 BRANCH="main"
 SELF_UPDATE=0 # -U: update this script from its git clone before running (off by default)
@@ -297,7 +296,9 @@ self_update() {
   sleep 3
 
   export KIWIX_ZIM_UPDATER_UPDATED=1
-  exec "$CALLEDSCRIPTNAME" "${ARGS[@]}"
+  # Run the updated file through bash by its absolute path: $0 may be a bare name (bash kiwix-zim-updater.sh) or a
+  # file without the executable bit, either of which would make a plain exec fail.
+  exec bash "$SCRIPT" "${ARGS[@]}"
 
   # Exit this old instance of the script
   exit 1
