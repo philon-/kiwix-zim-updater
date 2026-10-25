@@ -67,9 +67,8 @@ make lint test
   - `make lint test` must pass at **every** commit.
   - No drive-by reformatting.
   - Every phase of a plan makes at least one commit.
-  - Each commit message names its finding ID, e.g. `fix(F1): ...`.
+  - A commit that fixes a finding names its ID, e.g. `fix(F1): ...`.
   - End commit messages with the attribution line the harness provides.
-- **Keep fixes cherry-pickable.** Upstream may want individual fixes, so a fix must not depend on an unrelated refactor.
 - **Keep docs in sync.** The output of `kiwix-zim-updater.sh -h` and the usage block in `README.md` must match byte for byte. From the repository root, this runs `-h` from a scratch directory and compares the two:
 
   ```sh
