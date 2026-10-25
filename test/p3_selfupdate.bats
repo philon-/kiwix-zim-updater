@@ -64,3 +64,168 @@ OLD_WP=wikipedia_en_test_2025-12.zim
   refute_output --partial 'fetch'
   refute_output --partial 'pull'
 }
+
+###############################################################################
+# The update path, against a real local origin
+
+# Set up $SANDBOX/origin.git (bare) and $SANDBOX/clone, a clone of it on main
+# whose only commit holds the script and a NOTES file. Git in the run is the
+# real one behind a wrapper that logs every call to $FAKE_GIT_LOG. The user's
+# global and system git config are kept out of everything.
+setup_clone() {
+  REAL_GIT="$(PATH="${PATH#"$STUB_BIN:"}" command -v git)" || skip "git is not installed"
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+  mkdir "$SANDBOX/realgit"
+  cat >"$SANDBOX/realgit/git" <<WRAPPER
+#!$(command -v bash)
+printf '%s\n' "\$*" >>"\$FAKE_GIT_LOG"
+exec "$REAL_GIT" "\$@"
+WRAPPER
+  chmod +x "$SANDBOX/realgit/git"
+  sgit init -q --bare "$SANDBOX/origin.git"
+  sgit clone -q "$SANDBOX/origin.git" "$SANDBOX/clone" 2>/dev/null
+  sgit -C "$SANDBOX/clone" checkout -q -B main
+  cp "$REPO_ROOT/kiwix-zim-updater.sh" "$SANDBOX/clone/"
+  chmod +x "$SANDBOX/clone/kiwix-zim-updater.sh"
+  echo 'tracked notes' >"$SANDBOX/clone/NOTES"
+  sgit -C "$SANDBOX/clone" add -A
+  sgit -C "$SANDBOX/clone" commit -q -m 'v1'
+  sgit -C "$SANDBOX/clone" push -q origin main
+  CLONE_SCRIPT="$SANDBOX/clone/kiwix-zim-updater.sh"
+}
+
+# git for the test's own setup: real git, with an identity and no signing for
+# the sandbox repositories only.
+sgit() {
+  "$REAL_GIT" -c user.name='Test' -c user.email='test@example.invalid' \
+    -c commit.gpgsign=false -c init.defaultBranch=main "$@"
+}
+
+# Publish a new script version (VER=9.9-test) to origin from another clone.
+push_update() {
+  sgit clone -q "$SANDBOX/origin.git" "$SANDBOX/dev"
+  sed -i 's/^VER=.*/VER="9.9-test"/' "$SANDBOX/dev/kiwix-zim-updater.sh"
+  sgit -C "$SANDBOX/dev" commit -q -am 'v2'
+  sgit -C "$SANDBOX/dev" push -q origin main
+}
+
+# run_clone <args...> - run the clone's script from $RUN_DIR with the real git.
+run_clone() {
+  cd "$RUN_DIR" || return 1
+  PATH="$SANDBOX/realgit:$PATH" run bash "$CLONE_SCRIPT" "$@"
+}
+
+head_of() {
+  sgit -C "$1" rev-parse "${2:-HEAD}"
+}
+
+@test "H8: -U with an update available fast-forwards, re-execs once and completes" {
+  setup_clone
+  push_update
+  make_local_zim "$OLD_WP"
+  run_clone -U "$ZIMS"
+  assert_success
+  assert_output --partial 'Version: Mismatched'
+  assert_output --partial 'Running the updated version'
+  assert_output --partial 'v9.9-test'
+  assert_equal "$(grep -c 'Update Complete' <<<"$output")" 1
+  assert_equal "$(grep -c '3. Processing ZIM(s)...' <<<"$output")" 1
+  assert_equal "$(head_of "$SANDBOX/clone")" "$(head_of "$SANDBOX/origin.git" main)"
+  grep -q '^VER="9.9-test"$' "$CLONE_SCRIPT"
+  assert_equal "$(grep -c 'pull' "$FAKE_GIT_LOG")" 1
+  assert_equal "$(grep -c 'fetch' "$FAKE_GIT_LOG")" 1
+  run grep 'stash' "$FAKE_GIT_LOG"
+  assert_output ''
+  run download_log
+  assert_line '3. Processing ZIM(s)...'
+}
+
+@test "H8: -U when up to date reports Version: Current and pulls nothing" {
+  setup_clone
+  make_local_zim "$OLD_WP"
+  run_clone -U "$ZIMS"
+  assert_success
+  assert_output --partial 'Version: Current'
+  refute_output --partial 'Update Complete'
+  run grep -E 'pull|stash' "$FAKE_GIT_LOG"
+  assert_output ''
+}
+
+@test "H8: -U with local changes refuses to update and never stashes" {
+  setup_clone
+  push_update
+  echo 'my local edit' >>"$SANDBOX/clone/NOTES"
+  local before
+  before="$(head_of "$SANDBOX/clone")"
+  make_local_zim "$OLD_WP"
+  run_clone -U "$ZIMS"
+  assert_success
+  assert_output --partial 'has local changes: Not updating'
+  refute_output --partial 'Update Complete'
+  refute_output --partial 'v9.9-test'
+  assert_output --partial '3. Processing ZIM(s)...'
+  assert_equal "$(head_of "$SANDBOX/clone")" "$before"
+  run tail -n 1 "$SANDBOX/clone/NOTES"
+  assert_output 'my local edit'
+  run sgit -C "$SANDBOX/clone" stash list
+  assert_output ''
+  run grep -E 'pull|stash|checkout|reset' "$FAKE_GIT_LOG"
+  assert_output ''
+}
+
+@test "H8: -U with an untracked file in the clone refuses to update" {
+  setup_clone
+  push_update
+  echo 'scratch' >"$SANDBOX/clone/untracked.txt"
+  make_local_zim "$OLD_WP"
+  run_clone -U "$ZIMS"
+  assert_success
+  assert_output --partial 'has local changes: Not updating'
+  [[ -f "$SANDBOX/clone/untracked.txt" ]]
+  run grep -E 'pull|stash' "$FAKE_GIT_LOG"
+  assert_output ''
+}
+
+@test "H8: -U with a failing fetch reports it and continues with the current version" {
+  setup_clone
+  push_update
+  sgit -C "$SANDBOX/clone" remote set-url origin "$SANDBOX/missing.git"
+  make_local_zim "$OLD_WP"
+  run_clone -U "$ZIMS"
+  assert_success
+  assert_output --partial 'Could not fetch updates'
+  refute_output --partial 'Version: Current'
+  refute_output --partial 'Version: Mismatched'
+  assert_output --partial '3. Processing ZIM(s)...'
+  run grep -E 'diff|pull|stash' "$FAKE_GIT_LOG"
+  assert_output ''
+  run download_log
+  assert_output --partial 'Could not fetch updates'
+}
+
+@test "H8: -U with diverged local commits reports the failed fast-forward and continues" {
+  setup_clone
+  push_update
+  echo 'local commit' >>"$SANDBOX/clone/NOTES"
+  sgit -C "$SANDBOX/clone" commit -q -am 'local'
+  local before
+  before="$(head_of "$SANDBOX/clone")"
+  make_local_zim "$OLD_WP"
+  run_clone -U "$ZIMS"
+  assert_success
+  assert_output --partial 'Update failed'
+  refute_output --partial 'Update Complete'
+  assert_output --partial '3. Processing ZIM(s)...'
+  assert_equal "$(head_of "$SANDBOX/clone")" "$before"
+}
+
+@test "H8: without -U a clone with an update available makes no git call" {
+  setup_clone
+  push_update
+  make_local_zim "$OLD_WP"
+  run_clone "$ZIMS"
+  assert_success
+  assert_output --partial 'Check Skipped (use -U to enable)'
+  run cat "$FAKE_GIT_LOG"
+  assert_output ''
+}

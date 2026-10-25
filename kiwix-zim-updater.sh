@@ -206,50 +206,99 @@ master_scrape() {
   unset hrefs
 }
 
-# self_update - Script Self-Update Function
+# self_update - Script Self-Update Function. Only with -U, only on a clean clone on $BRANCH, and only by fast-forward.
+# Any failure is reported and the run continues with the current version. After an update the new version is run with
+# the same arguments; KIWIX_ZIM_UPDATER_UPDATED (deliberately read from the environment) stops it from updating again.
 self_update() {
+  local fetchStatus diffStatus oldHead newHead
   echo -e "${YELLOW_BOLD}1. Checking for Script Updates...${CLEAR}"
   echo  "1. Checking for Script Updates..." >> "$LOG_FILE"
   echo
-  # Check if script path is a git clone.
-  #   If true, then check for update.
-  #   If false, skip self-update check/function.
   if [[ $SELF_UPDATE -ne 1 ]]; then
     echo -e "${YELLOW_REGULAR}   Check Skipped (use -U to enable)${CLEAR}"
     echo "Check Skipped (use -U to enable)" >> "$LOG_FILE"
-  elif [[ -e "$SCRIPTPATH/.git" ]]; then
-    echo -e "${GREEN_BOLD}   ✓ Git Clone Detected: Checking Script Version...${CLEAR}"
-    echo "✓ Git Clone Detected: Checking Script Version..." >> "$LOG_FILE"
-    [[ $(timeout 1s git -C "$SCRIPTPATH" rev-parse --abbrev-ref HEAD) != "$BRANCH" ]] && echo -e "${YELLOW_BOLD}     You appear to be on a different branch so I will assume you are developing and do not want an update${CLEAR}" && echo && return
-    timeout 1s git -C "$SCRIPTPATH" fetch --quiet
-    timeout 1s git -C "$SCRIPTPATH" diff --quiet --exit-code "origin/$BRANCH" "$SCRIPTFILE"
-    [ $? -eq 1 ] && {
-      echo -e "${RED_REGULAR}   ✗ Version: Mismatched${CLEAR}"
-      echo "✗ Version: Mismatched" >> "$LOG_FILE"
-      echo
-      echo -e "${YELLOW_BOLD}1a. Fetching Update...${CLEAR}"
-      echo "1a. Fetching Update..." >> "$LOG_FILE"
-      echo
-      if [ -n "$(git -C "$SCRIPTPATH" status --porcelain)" ]; then
-        git -C "$SCRIPTPATH" stash push -m 'local changes stashed before self update' --quiet
-      fi
-      git -C "$SCRIPTPATH" pull --force --quiet
-      git -C "$SCRIPTPATH" checkout $BRANCH --quiet
-      git -C "$SCRIPTPATH" pull --force --quiet
-      echo -e "${GREEN_BOLD}   ✓ Update Complete. Running New Version. Standby...${CLEAR}"
-      echo "✓ Update Complete. Running New Version. Standby..." >> "$LOG_FILE"
-      sleep 3
-
-      exec "$CALLEDSCRIPTNAME" "${ARGS[@]}"
-
-      # Exit this old instance of the script
-      exit 1
-    }
-    echo -e "${GREEN_BOLD}   ✓ Version: Current${CLEAR}"
-  else
-    echo -e "${RED_REGULAR}   ✗ Git Clone Not Detected: Skipping Update Check${CLEAR}"
+    echo
+    return
   fi
+  if [[ -n "${KIWIX_ZIM_UPDATER_UPDATED:-}" ]]; then
+    unset KIWIX_ZIM_UPDATER_UPDATED
+    echo -e "${GREEN_BOLD}   ✓ Running the updated version${CLEAR}"
+    echo "✓ Running the updated version" >> "$LOG_FILE"
+    echo
+    return
+  fi
+  if [[ ! -e "$SCRIPTPATH/.git" ]]; then
+    echo -e "${RED_REGULAR}   ✗ Git Clone Not Detected: Skipping Update Check${CLEAR}"
+    echo "✗ Git Clone Not Detected: Skipping Update Check" >> "$LOG_FILE"
+    echo
+    return
+  fi
+  echo -e "${GREEN_BOLD}   ✓ Git Clone Detected: Checking Script Version...${CLEAR}"
+  echo "✓ Git Clone Detected: Checking Script Version..." >> "$LOG_FILE"
+  if [[ $(timeout 10s git -C "$SCRIPTPATH" rev-parse --abbrev-ref HEAD) != "$BRANCH" ]]; then
+    echo -e "${YELLOW_BOLD}     You appear to be on a different branch so I will assume you are developing and do not want an update${CLEAR}"
+    echo "Not on branch $BRANCH: Skipping Update" >> "$LOG_FILE"
+    echo
+    return
+  fi
+  # Never prompt for credentials (nobody answers under cron) and never hang for long on the network
+  GIT_TERMINAL_PROMPT=0 timeout 30s git -C "$SCRIPTPATH" fetch --quiet origin
+  fetchStatus=$?
+  if [[ $fetchStatus -ne 0 ]]; then
+    echo -e "${RED_REGULAR}   ✗ Could not fetch updates (git exit $fetchStatus): Continuing with the current version${CLEAR}"
+    echo "✗ Could not fetch updates (git exit $fetchStatus): Continuing with the current version" >> "$LOG_FILE"
+    echo
+    return
+  fi
+  timeout 10s git -C "$SCRIPTPATH" diff --quiet --exit-code "origin/$BRANCH" -- "$SCRIPTFILE"
+  diffStatus=$?
+  if [[ $diffStatus -eq 0 ]]; then
+    echo -e "${GREEN_BOLD}   ✓ Version: Current${CLEAR}"
+    echo "✓ Version: Current" >> "$LOG_FILE"
+    echo
+    return
+  elif [[ $diffStatus -ne 1 ]]; then
+    echo -e "${RED_REGULAR}   ✗ Could not compare with origin/$BRANCH (git exit $diffStatus): Continuing with the current version${CLEAR}"
+    echo "✗ Could not compare with origin/$BRANCH (git exit $diffStatus): Continuing with the current version" >> "$LOG_FILE"
+    echo
+    return
+  fi
+  echo -e "${RED_REGULAR}   ✗ Version: Mismatched${CLEAR}"
+  echo "✗ Version: Mismatched" >> "$LOG_FILE"
   echo
+  echo -e "${YELLOW_BOLD}1a. Fetching Update...${CLEAR}"
+  echo "1a. Fetching Update..." >> "$LOG_FILE"
+  echo
+  # Local work is never stashed, reset or overwritten: a modified clone is left alone
+  if [[ -n "$(git -C "$SCRIPTPATH" status --porcelain)" ]]; then
+    echo -e "${RED_REGULAR}   ✗ $SCRIPTPATH has local changes: Not updating, continuing with the current version${CLEAR}"
+    echo "✗ $SCRIPTPATH has local changes: Not updating, continuing with the current version" >> "$LOG_FILE"
+    echo
+    return
+  fi
+  oldHead="$(git -C "$SCRIPTPATH" rev-parse HEAD)"
+  if ! GIT_TERMINAL_PROMPT=0 timeout 30s git -C "$SCRIPTPATH" pull --ff-only --no-rebase --quiet origin "$BRANCH"; then
+    echo -e "${RED_REGULAR}   ✗ Update failed (no fast-forward possible?): Continuing with the current version${CLEAR}"
+    echo "✗ Update failed (no fast-forward possible?): Continuing with the current version" >> "$LOG_FILE"
+    echo
+    return
+  fi
+  newHead="$(git -C "$SCRIPTPATH" rev-parse HEAD)"
+  if [[ "$newHead" == "$oldHead" ]]; then
+    echo -e "${YELLOW_REGULAR}   Nothing to fast-forward (local commits ahead of origin/$BRANCH?): Continuing with the current version${CLEAR}"
+    echo "Nothing to fast-forward: Continuing with the current version" >> "$LOG_FILE"
+    echo
+    return
+  fi
+  echo -e "${GREEN_BOLD}   ✓ Update Complete. Running New Version. Standby...${CLEAR}"
+  echo "✓ Update Complete. Running New Version. Standby..." >> "$LOG_FILE"
+  sleep 3
+
+  export KIWIX_ZIM_UPDATER_UPDATED=1
+  exec "$CALLEDSCRIPTNAME" "${ARGS[@]}"
+
+  # Exit this old instance of the script
+  exit 1
 }
 
 # usage_example [<exit code>] - Show Usage and Exit (default 0). On a usage error the text goes to stderr.
