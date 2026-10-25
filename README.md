@@ -72,6 +72,9 @@ Both files are written to the **current directory**, i.e. the directory you run 
 - **Downloads are staged in a `.part` file.** A new ZIM is downloaded as `<name>.zim.part` and only renamed to `<name>.zim` once it passed the size check (and the sha256 with `-c`), so Kiwix, and this script, never see an unfinished or unverified file under a `.zim` name. If the download fails or is interrupted, the `.part` file is kept, and the next run that updates that ZIM continues it (`wget -c`) instead of starting over. A complete `.part` file, for example after a run was killed while hashing it, is verified and renamed without being downloaded again. A `.part` file that fails its checksum is deleted, and one that is larger than published is started over. A `.part` file that no run can use any more, because its release left the catalog, or because `-f` has just verified its finished ZIM as good, is listed at the end of the run. Delete it yourself, or run with `--clean-partials` to have the script delete such files. Nothing else is ever deleted by that option: a `.part` file that a later run can still resume is kept, for example one held back by `-n`/`-x`, or the replacement of a corrupt ZIM that the next `-f` run continues. `--clean-partials` treats every `*.zim.part` file in the ZIM directory as its own, so don't let a browser or another download tool save into the ZIM directory while you use it.
 - **Leftovers of older versions.** Older versions of this script downloaded straight into the ZIM's name and marked unfinished files with a `.~lock.<name>` file. Such a file next to an older version of the same ZIM is turned into a `.part` file and resumed. A lone one, with no other version of the ZIM next to it, is finished in place as before. The cleanup never deletes a file that has such a marker; it only removes a marker whose file is gone.
 - **`-f` never deletes a ZIM it cannot replace.** With `-d`, `-f` replaces a ZIM only when it is the version currently in the catalog, it failed the size or sha256 check against the published metadata, and `-p` is not given. The replacement is downloaded into a `.part` file, and the corrupt ZIM stays in place until the new file is verified and renamed over it. A ZIM that is outdated or has no catalog entry is only checked against its own checksum (a cached `.sha256` next to it, or for an outdated ZIM the checksum still published online) and is never deleted. A ZIM that fails its check and is kept, or that cannot be verified because its metadata or checksum is unavailable, is reported, and the run exits 1. A ZIM with no checksum anywhere to check against is skipped.
+- **The disk never fills up.** Before a download starts, the script checks that the file system holding the ZIM directory keeps at least `--min-free` (default 1 GiB) free after it. Otherwise the download is skipped, the old ZIM is kept and the run exits 1. A download whose size cannot be verified, because the metadata is unavailable, is not started at all.
+- **A stalled connection cannot hang a run.** Every request has a 30 second connect timeout, a 5 minute read timeout and at most 3 tries. When a download gives up, it stays a `.part` file and the next run continues it.
+- **An internet outage changes nothing locally.** Without the catalog the run stops with exit 1 before it touches the ZIM directory. Without the metadata no download starts and nothing is purged. Your ZIMs stay exactly as they are and keep working offline; the next run after the outage picks up where it left off.
 - **One instance per ZIM directory.** The script takes an exclusive `flock` on the ZIM directory itself before it fetches the catalog. A second run on the same directory exits 75 straight away. No lock file is created, so this also works on a read-only directory. Runs on different ZIM directories do not block each other.
 - **Torrents (`-t`)** only download the `.torrent` file next to the old ZIM. The old ZIM is kept; downloading the torrent's content is up to your torrent client.
 - **Checksum files.** For each ZIM it downloads or verifies, the script stores the published sha256 as `<ZIM name>.sha256` next to the ZIM, so that `-f` can check the library later without the metadata servers: when the metadata cannot be fetched, `-f` verifies against the stored checksum instead. The catalog is still needed, so a fully offline `-f` run only works while the cached `kiwix-index` is less than a day old. `-S` turns writing these files off. A checksum file is never written in a dry-run, for a failed download, or with an empty or malformed hash.
@@ -97,6 +100,8 @@ MAILTO=you@example.org
 ```
 
 Here `download.log` and `kiwix-index` end up in `/var/lib/kiwix`. Exit code 75 only means that the previous run is still busy; you may want to ignore it.
+
+For unattended use, consider adding `-c`: without it, a replacement is verified by its size only before the old ZIM is purged; with it, also by its sha256. If the disk holding the ZIMs is shared with other services, raise `--min-free` so updates always leave them room. During an internet outage every run simply exits 1 and changes nothing, so it is safe to keep the cron job running.
 
 ## Limitations
 
@@ -162,6 +167,8 @@ Universal Options:
                                Specify units include M Mi G Gi, etc. See `man numfmt`
     -x <size>, --max-size      Maximum ZIM Size to be downloaded.
                                Specify units include M Mi G Gi, etc. See `man numfmt`
+    --min-free <size>          Free space to keep in the ZIM directory after a download (default 1Gi, 0 disables).
+                               A download that would leave less is skipped and the old ZIM kept.
     -S, --no-sha               Disables saving the zim checksum for future reference. Does not delete present checksums.
                                
 Action Method Options:
@@ -217,6 +224,7 @@ Compared with upstream [jojo2357/kiwix-zim-updater](https://github.com/jojo2357/
 - **Downloads are staged** in `.part` files and only renamed to `.zim` once verified, so Kiwix never sees an unfinished file. `--clean-partials` deletes `.part` files that can no longer be used. Interrupted downloads are resumed on the next run instead of being deleted and started over, and `-f` replaces a corrupt ZIM only once its replacement is verified.
 - **GNU Wget2 support.**
 - **One instance per ZIM directory**, enforced with `flock`.
+- **Unattended safety.** A free-space reserve (`--min-free`, default 1 GiB) keeps downloads from filling the disk, network requests have timeouts and a retry limit, and no download starts when its size cannot be verified.
 - **`-S` works.** It used to be accepted but had no effect.
 - **`download.log` and `kiwix-index`** always stay in the directory you run the script from.
 - **ZIM listing.** Names with spaces and upper-case `.ZIM` extensions are handled, directories named `*.zim` are ignored, and a file whose name merely ends in a catalog name is no longer mistaken for that ZIM. Exported environment variables such as `SKIP_PURGE` no longer change the script's behaviour.

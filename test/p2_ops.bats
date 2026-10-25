@@ -20,7 +20,7 @@ make_tooldir() {
   mkdir -p "$tooldir"
   for tool in bash env readlink realpath basename dirname date head tail grep \
     tee uniq wc ls numfmt du sha256sum touch rm mv cp mkdir mktemp cat sleep \
-    timeout flock sed awk tr sort stat find cut id uname; do
+    timeout flock sed awk tr sort stat find cut id uname df; do
     for skip in "$@"; do
       [[ "$tool" == "$skip" ]] && continue 2
     done

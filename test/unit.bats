@@ -272,7 +272,7 @@ assert_fixture_arrays() {
   local base_path="${PATH#"$STUB_BIN:"}"
   SKIP_UPDATE=1
   mkdir "$tooldir"
-  for tool in sha256sum flock stat du timeout grep; do
+  for tool in sha256sum flock stat du df timeout grep; do
     src="$(PATH="$base_path" command -v "$tool")" || continue
     ln -s "$src" "$tooldir/$tool"
   done

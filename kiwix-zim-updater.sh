@@ -39,6 +39,7 @@ DEBUG=1 # This forces the script to default to "dry-run/simulation mode"
 ForcedDryRun=0
 MIN_SIZE=0
 MAX_SIZE=0
+MIN_FREE=1073741824 # --min-free: bytes to keep free in the ZIM directory after a download (1 GiB; 0 disables)
 CALCULATE_CHECKSUM=0
 CHECKSUM_FILES=1
 VERIFY_LIBRARY=0
@@ -325,6 +326,8 @@ usage_example() {
   echo '                               Specify units include M Mi G Gi, etc. See `man numfmt`'
   echo '    -x <size>, --max-size      Maximum ZIM Size to be downloaded.'
   echo '                               Specify units include M Mi G Gi, etc. See `man numfmt`'
+  echo '    --min-free <size>          Free space to keep in the ZIM directory after a download (default 1Gi, 0 disables).'
+  echo '                               A download that would leave less is skipped and the old ZIM kept.'
   echo '    -S, --no-sha               Disables saving the zim checksum for future reference. Does not delete present checksums.'
   echo '                               '
   echo 'Action Method Options:'
@@ -504,7 +507,7 @@ detect_wget_flavor() {
 # check_dependencies - Make sure every external tool the run needs is present before doing any work
 check_dependencies() {
   local missing=() tool
-  for tool in wget numfmt sha256sum flock stat du timeout; do
+  for tool in wget numfmt sha256sum flock stat du df timeout; do
     command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
   done
   # The parsing relies on Perl-compatible regular expressions, which not every grep has
@@ -634,6 +637,11 @@ other_local_version_exists() {
   return 1
 }
 
+# free_bytes <dir> - Print the bytes available to this user in the file system holding <dir> (empty if unknown)
+free_bytes() {
+  df -B1 --output=avail -- "$1" 2>/dev/null | tail -n 1 | tr -d ' '
+}
+
 # hash_matches <name> <hash> - True if $ZIMPath<name> has the given sha256. Needs no .sha256 file on disk.
 hash_matches() {
   (cd "$ZIMPath" && printf '%s  %s\n' "$2" "$1" | sha256sum --status -c - 2>/dev/null)
@@ -717,6 +725,13 @@ main() {
         MIN_SIZE=$(numfmt --from=auto "$1" 2>/dev/null) # convert passed arg to bytes
         [[ "$MIN_SIZE" =~ ^[0-9]+$ ]] || usage_error "Invalid minimum size: '$1'"
         shift                               # discard value
+        ;;
+      --min-free)
+        [[ $# -lt 2 ]] && usage_error "$1 requires a size"
+        shift
+        MIN_FREE=$(numfmt --from=auto "$1" 2>/dev/null)
+        [[ "$MIN_FREE" =~ ^[0-9]+$ ]] || usage_error "Invalid free space reserve: '$1'"
+        shift
         ;;
       -x | --max-size)
         [[ $# -lt 2 ]] && usage_error "$1 requires a size"
@@ -1210,7 +1225,28 @@ main() {
             echo "$PartPath is larger than published, starting the download over" >>"$LOG_FILE"
             [[ $DEBUG -eq 0 ]] && rm -f "$PartPath"
           fi
-          if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$DownloadTarget" ]] && [[ $(stat -c %s "$DownloadTarget") -eq $ExpectedSize ]]; then
+          # Before fetching anything: without the published size the download could never be verified, and it must
+          # not fill the file system that also holds the library (keep --min-free free afterwards)
+          SpaceProblem=""
+          if ! [[ "$ExpectedSize" =~ ^[0-9]+$ ]]; then
+            SpaceProblem="metadata unavailable, the download could not be verified"
+          elif ! [[ -f "$DownloadTarget" && $(stat -c %s "$DownloadTarget") -eq $ExpectedSize ]]; then
+            AlreadyHave=0
+            [[ -f "$DownloadTarget" ]] && [[ "$DownloadTarget" == "$PartPath" ]] && AlreadyHave=$(stat -c %s "$DownloadTarget")
+            Available=$(free_bytes "$ZIMPath")
+            if [[ "$Available" =~ ^[0-9]+$ ]] && [[ $((Available - (ExpectedSize - AlreadyHave))) -lt $MIN_FREE ]]; then
+              SpaceProblem="not enough free space: it needs $(numfmt --to=iec-i $((ExpectedSize - AlreadyHave))), $(numfmt --to=iec-i "$Available") is available and $(numfmt --to=iec-i "$MIN_FREE") must stay free (--min-free)"
+            fi
+          fi
+          if [[ -n "$SpaceProblem" ]]; then
+            if [[ $DEBUG -eq 0 ]]; then
+              echo -e "${RED_BOLD}    ✗ Status : Download skipped, $SpaceProblem. Old ZIM kept.${CLEAR}"
+              echo "✗ Status : Download of $NewZIM skipped, $SpaceProblem. Old ZIM kept." >>"$LOG_FILE"
+              DownloadFailed=1
+            else
+              echo -e "${YELLOW_BOLD}    *** Simulated *** The download would be skipped: $SpaceProblem${CLEAR}"
+            fi
+          elif [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$DownloadTarget" ]] && [[ $(stat -c %s "$DownloadTarget") -eq $ExpectedSize ]]; then
             # The interrupted download is already complete (e.g. the run was killed while hashing it). Do not ask wget
             # to resume it: Wget2 appends the whole body again when a server ignores the range request. Just verify it.
             echo -e "${GREEN_REGULAR}    ✓ Status : Interrupted download is already complete, verifying it${CLEAR}"
