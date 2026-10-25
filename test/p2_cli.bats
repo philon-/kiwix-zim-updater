@@ -235,6 +235,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   printf 'extra' >>"$(remote_file zim/wikipedia/wikipedia_en_test_2026-01.zim)"
   run_updater -d "$ZIMS"
   assert_failure 1
+  assert_output --partial 'it is larger than published and cannot be resumed'
+  [[ ! -e "$ZIMS/$NEW_WP.part" ]]
   [[ ! -e "$ZIMS/.~lock.$NEW_WP" ]]
   [[ ! -e "$ZIMS/$NEW_WP" ]]
   [[ -f "$ZIMS/$OLD_WP" ]]
