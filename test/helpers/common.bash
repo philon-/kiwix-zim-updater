@@ -197,6 +197,17 @@ refute_nonempty() {
   [[ ! -s "$1" ]] || fail "expected nothing or an empty file at $1: $(head -c 500 "$1")"
 }
 
+# wait_until <seconds> <command...> - poll <command> until it succeeds; fail after <seconds>.
+wait_until() {
+  local timeout="$1" deadline
+  shift
+  deadline=$((SECONDS + timeout))
+  until "$@"; do
+    ((SECONDS < deadline)) || fail "gave up after ${timeout}s waiting for: $*"
+    sleep 0.1
+  done
+}
+
 # keep_copy <name> - keep a pristine copy of a file in the ZIM directory, for assert_zim_unchanged after the run.
 keep_copy() {
   cp "$ZIMS/$1" "$SANDBOX/$1.orig"

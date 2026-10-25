@@ -13,6 +13,22 @@ listed() {
   grep -o 'path="[^"]*"' "$LIB" | sed 's/^path="//; s/"$//' | LC_ALL=C sort
 }
 
+# The library's modification time (to the nanosecond) and size
+lib_stamp() {
+  stat -c '%y %s' "$LIB"
+}
+
+# True once the library's stamp differs from <stamp>. The script touches a library it wrote again 2s later.
+lib_touched_since() {
+  [[ "$(lib_stamp)" != "$1" ]]
+}
+
+# True once every delayed touch has happened: no process (the script's background subshell, its touch) names the
+# library any more. A run that writes the library twice leaves two of them.
+lib_settled() {
+  ! pgrep -f -- "$LIB" >/dev/null
+}
+
 @test "library: an update lists the new ZIM, not the purged one, and never a .part file" {
   make_local_zim "$WP_OLD"
   run_updater -d --library "$LIB" "$ZIMS"
@@ -56,14 +72,13 @@ listed() {
   make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
-  sleep 3 # let the delayed touch of the first write happen
+  wait_until 10 lib_settled
   local before
-  before="$(stat -c '%Y %s' "$LIB")"
-  sleep 1
+  before="$(lib_stamp)"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   refute_output --partial 'Library:'
-  assert_equal "$(stat -c '%Y %s' "$LIB")" "$before"
+  assert_equal "$(lib_stamp)" "$before"
 }
 
 @test "library: a changed library is touched again shortly after it was written" {
@@ -71,9 +86,8 @@ listed() {
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
   local first
-  first="$(stat -c %Y "$LIB")"
-  sleep 4
-  [[ "$(stat -c %Y "$LIB")" -gt "$first" ]]
+  first="$(lib_stamp)"
+  wait_until 10 lib_touched_since "$first"
 }
 
 @test "library: the delayed touch does not keep the ZIM directory locked" {
@@ -135,15 +149,16 @@ listed() {
 @test "library: an internet outage leaves the library untouched" {
   make_local_zim "$WP_OLD"
   run_updater -d --library "$LIB" "$ZIMS"
-  sleep 3
+  assert_success
+  wait_until 10 lib_settled
   cp "$LIB" "$SANDBOX/lib.orig"
   local before
-  before="$(stat -c %Y "$LIB")"
+  before="$(lib_stamp)"
   export FAKE_WGET_CATALOG_FAIL=1
   run_updater -d -g --library "$LIB" "$ZIMS"
   assert_failure 1
   cmp "$LIB" "$SANDBOX/lib.orig"
-  assert_equal "$(stat -c %Y "$LIB")" "$before"
+  assert_equal "$(lib_stamp)" "$before"
 }
 
 @test "library: a relative --library path is resolved against the current directory" {
