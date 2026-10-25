@@ -616,6 +616,20 @@ cleanup_partials() {
   return 0
 }
 
+# other_local_version_exists <title> <name> - True if the ZIM directory holds a .zim of the same title (<title> is the
+# catalog base name including its trailing "_", e.g. wikipedia_en_all_maxi_) other than <name>
+other_local_version_exists() {
+  local f rest
+  for f in "$ZIMPath$1"*.[zZ][iI][mM]; do
+    [[ -f "$f" ]] || continue
+    f="${f##*/}"
+    [[ "$f" == "$2" ]] && continue
+    rest="${f#"$1"}"
+    [[ "$rest" =~ ^[0-9]{4}-[0-9]{2}[a-zA-Z]?\.[zZ][iI][mM]$ ]] && return 0
+  done
+  return 1
+}
+
 # hash_matches <name> <hash> - True if $ZIMPath<name> has the given sha256. Needs no .sha256 file on disk.
 hash_matches() {
   (cd "$ZIMPath" && printf '%s  %s\n' "$2" "$1" | sha256sum --status -c - 2>/dev/null)
@@ -1166,10 +1180,15 @@ main() {
           DownloadTarget="$PartPath"
           if [[ -f "$LockFilePath" ]]; then
             # A `.~lock.` marker comes from an older version of this script, which downloaded straight into the ZIM's
-            # name. A lone locked file (no other version of the ZIM) is finished in place as before: moved to .part it
-            # would drop out of the ZIM listing and never be resumed. Next to an older version it becomes a .part file.
-            if [[ -f "$NewZIMPath" ]] && [[ "$OldZIMPath" == "$NewZIMPath" ]]; then
-              DownloadTarget="$NewZIMPath"
+            # name. Next to another version of the same ZIM the locked file becomes a .part file. A lone one (no other
+            # version) stays where it is, so the ZIM stays in the listing: if it already has the published size it is
+            # verified in place, otherwise the replacement is downloaded into .part and renamed over it once verified.
+            # Nothing is ever written into the locked file itself (Wget2 would append to it when a server ignores the
+            # range request).
+            if [[ -f "$NewZIMPath" ]] && ! other_local_version_exists "${Basenames[${LocalZIMRemoteIndexArray[$z]}]}" "$NewZIM"; then
+              if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -eq $ExpectedSize ]] && [[ ! -e "$PartPath" ]]; then
+                DownloadTarget="$NewZIMPath"
+              fi
             elif [[ $DEBUG -eq 0 ]]; then
               if [[ -f "$NewZIMPath" ]] && [[ ! -e "$PartPath" ]]; then
                 mv -f "$NewZIMPath" "$PartPath" && echo "Moved interrupted download $NewZIMPath to $PartPath" >>"$LOG_FILE"
@@ -1238,9 +1257,17 @@ main() {
         elif [[ $DEBUG -eq 1 ]]; then
           echo -e "${GREEN_BOLD}    ✓ *** Simulated *** Checksum passed${CLEAR}"
         elif ! hash_matches "$CheckName" "$ExpectedHash"; then
-          echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt download${CLEAR}"
-          echo "✗ Checksum failed, removing corrupt download $CheckPath" >>"$LOG_FILE"
-          rm -f "$CheckPath"
+          if [[ "$CheckPath" == "$NewZIMPath" ]] && [[ -f "$LockFilePath" ]]; then
+            # A lone locked file of an older version of this script: keep it (it is the only copy of this ZIM) and turn
+            # it into a normal ZIM, so that -f replaces it the usual way, verified before anything is removed
+            echo -e "${RED_BOLD}    ✗ Checksum failed for $NewZIM. It is kept; run with -f to replace it with a verified download.${CLEAR}"
+            echo "✗ Checksum failed for $NewZIM (old-style interrupted download). Kept; run with -f to replace it." >>"$LOG_FILE"
+            rm -f "$LockFilePath"
+          else
+            echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt download${CLEAR}"
+            echo "✗ Checksum failed, removing corrupt download $CheckPath" >>"$LOG_FILE"
+            rm -f "$CheckPath"
+          fi
           DownloadFailed=1
         else
           echo -e "${GREEN_BOLD}    ✓ Checksum passed${CLEAR}"

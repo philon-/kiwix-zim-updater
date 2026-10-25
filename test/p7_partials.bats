@@ -134,13 +134,13 @@ keep_copy() {
   [[ ! -e "$ZIMS/$WOLD" ]]
 }
 
-@test "part: a lone old-style locked partial is still finished in place" {
+@test "part: a lone old-style locked partial stays in place until its replacement is verified" {
   head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
   touch "$ZIMS/.~lock.$W"
   export FAKE_WGET_NETFAIL="$W"
   run_updater -d "$ZIMS"
   assert_failure 1
-  # Still under its own name with its lock, so the next run finds and resumes it
+  # Still under its own name with its lock (it keeps the ZIM in the listing); nothing was written into it
   [[ -s "$ZIMS/$W" ]]
   [[ -f "$ZIMS/.~lock.$W" ]]
   [[ ! -e "$ZIMS/$W.part" ]]
@@ -218,4 +218,55 @@ keep_copy() {
   local readme
   readme="$(awk '/^## Usage$/{u=1;next} u && /^```text$/{p=1;next} p && /^```$/{exit} p' "$REPO_ROOT/README.md")"
   assert_equal "$output" "$readme"
+}
+
+@test "part: a lone old-style locked file larger than published is replaced, never appended to" {
+  { cat "$(remote_file "$WREMOTE")"; printf 'garbage'; } >"$ZIMS/$W"
+  touch "$ZIMS/.~lock.$W"
+  run_updater -d "$ZIMS"
+  assert_success
+  run wget_downloads
+  assert_output --partial "-O $ZIMS/$W.part"
+  refute_output --partial "-O $ZIMS/$W "
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  [[ ! -e "$ZIMS/$W.part" ]]
+}
+
+@test "part: a lone old-style locked file is never written to, even when the replacement fails" {
+  { cat "$(remote_file "$WREMOTE")"; printf 'garbage'; } >"$ZIMS/$W"
+  cp "$ZIMS/$W" "$SANDBOX/orig"
+  touch "$ZIMS/.~lock.$W"
+  export FAKE_WGET_FAIL="$W"
+  run_updater -d "$ZIMS"
+  assert_failure 1
+  cmp "$ZIMS/$W" "$SANDBOX/orig"
+  [[ -f "$ZIMS/.~lock.$W" ]]
+}
+
+@test "part: a complete lone old-style locked file that fails -c is kept and becomes a normal ZIM" {
+  LC_ALL=C tr '\000-\377' '\001-\377\000' <"$(remote_file "$WREMOTE")" >"$ZIMS/$W"
+  cp "$ZIMS/$W" "$SANDBOX/orig"
+  touch "$ZIMS/.~lock.$W"
+  run_updater -d -c "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'run with -f to replace it'
+  cmp "$ZIMS/$W" "$SANDBOX/orig"
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  # ...and -f then replaces it with a verified download
+  run_updater -f -d "$ZIMS"
+  assert_success
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+}
+
+@test "part: a locked catalog version next to an older version of the same title is migrated, whatever the sort order" {
+  make_local_zim wiktionary_fr_test_2026-02.zim
+  head -c 1000 "$(remote_file zim/wiktionary/wiktionary_fr_test_2026-02a.zim)" >"$ZIMS/wiktionary_fr_test_2026-02a.zim"
+  touch "$ZIMS/.~lock.wiktionary_fr_test_2026-02a.zim"
+  LC_ALL=en_US.UTF-8 run_updater -d "$ZIMS"
+  assert_success
+  run wget_downloads
+  refute_output --partial "-O $ZIMS/wiktionary_fr_test_2026-02a.zim "
+  cmp "$ZIMS/wiktionary_fr_test_2026-02a.zim" "$(remote_file zim/wiktionary/wiktionary_fr_test_2026-02a.zim)"
+  [[ ! -e "$ZIMS/wiktionary_fr_test_2026-02.zim" ]]
 }
