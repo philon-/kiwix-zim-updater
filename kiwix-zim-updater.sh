@@ -864,6 +864,7 @@ main() {
       DownloadURL=""
       ExpectedSize=""
       ExpectedHash=""
+      HashFromCache=0 # set when -f verifies against the cached .sha256 because the metadata is unavailable
 
       OldZIM=${LocalZIMNameArray[$z]}
       OldZIMPath=$ZIMPath$OldZIM
@@ -888,6 +889,7 @@ main() {
         # -f without metadata (offline, or the meta4 fetch failed): fall back to the checksum stored on an earlier run
         if [[ $VERIFY_LIBRARY -eq 1 ]] && ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]] && [[ -f "$OldZIMPath.sha256" ]]; then
           ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
+          HashFromCache=1
           echo -e "${YELLOW_REGULAR}    Metadata unavailable, verifying against the cached checksum${CLEAR}"
           echo "Metadata unavailable for $OldZIM, verifying against the cached checksum" >>"$LOG_FILE"
         fi
@@ -985,6 +987,13 @@ main() {
             elif [[ ${LocalRequiresDownloadArray[$z]} -ne 1 ]]; then
               echo -e "${RED_BOLD}    ✗ Checksum failed. File kept; a normal update run (without -f) will replace it with the newer version.${CLEAR}"
               echo "✗ Checksum failed for $OldZIM. File kept; a normal update run will replace it with the newer version." >>"$LOG_FILE"
+              AnyVerifyFailed=1
+              echo
+              continue
+            elif [[ $HashFromCache -eq 1 ]]; then
+              # Without metadata a replacement could not be verified, so deleting the file would only lose it
+              echo -e "${RED_BOLD}    ✗ Checksum failed against the cached checksum. File kept: without metadata no replacement can be verified now.${CLEAR}"
+              echo "✗ Checksum failed for $OldZIM against the cached checksum. File kept: without metadata no replacement can be verified now." >>"$LOG_FILE"
               AnyVerifyFailed=1
               echo
               continue

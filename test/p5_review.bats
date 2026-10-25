@@ -261,3 +261,35 @@ keep_copy() {
   cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
   [[ ! -e "$ZIMS/$W" ]]
 }
+
+@test "N12: offline -f -d keeps a current ZIM that fails its cached checksum (no replacement can be verified)" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_sha256 "$W"
+  run_updater -f "$ZIMS"
+  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
+  keep_copy "$W"
+  cp "$ZIMS/$W.sha256" "$SANDBOX/sha256.orig"
+  : >"$FAKE_WGET_LOG"
+  export FAKE_WGET_META_FAIL=1 FAKE_WGET_CATALOG_FAIL=1
+  run_updater -f -d "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'Checksum failed against the cached checksum. File kept'
+  cmp "$ZIMS/$W" "$SANDBOX/$W.orig"
+  cmp "$ZIMS/$W.sha256" "$SANDBOX/sha256.orig"
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  run wget_downloads
+  assert_output ''
+}
+
+@test "N12: with only the meta4 down, -f -d keeps the ZIM instead of starting an unverifiable download" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_sha256 "$W"
+  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
+  keep_copy "$W"
+  export FAKE_WGET_META_FAIL=1
+  run_updater -f -d "$ZIMS"
+  assert_failure 1
+  cmp "$ZIMS/$W" "$SANDBOX/$W.orig"
+  run wget_downloads
+  assert_output ''
+}
