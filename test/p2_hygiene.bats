@@ -104,3 +104,26 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run wget_downloads
   assert_output ''
 }
+
+###############################################################################
+# N4: -S/--no-sha stops new .sha256 files from being written.
+
+@test "N4: -f -d -S still verifies the library but writes no .sha256" {
+  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
+  run_updater -f -d -S "$ZIMS"
+  assert_success
+  assert_output --partial 'Checksum passed'
+  [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
+  run find "$ZIMS" -name '*.sha256*'
+  assert_output ''
+}
+
+@test "N4: -f -d -S still detects and replaces a corrupt ZIM" {
+  make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
+  printf 'X' | dd of="$ZIMS/$NEW_WP" bs=1 seek=10 conv=notrunc status=none
+  run_updater -f -d -S "$ZIMS"
+  assert_output --partial 'Checksum failed, removing corrupt file'
+  cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
+  run find "$ZIMS" -name '*.sha256*'
+  assert_output ''
+}

@@ -380,7 +380,6 @@ EOF
 }
 
 @test "N4: -S stops new .sha256 files from being written" {
-  skip "N4: CHECKSUM_FILES (-S/--no-sha) is set but never read"
   make_local_zim "$OLD_WP"
   run_updater -d -S "$ZIMS"
   assert_success

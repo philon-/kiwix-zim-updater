@@ -422,9 +422,11 @@ hash_matches() {
 }
 
 # write_checksum_file <name> <hash> - Store the checksum next to the ZIM for later offline verification (-f).
-# Never in dry-run, and never with a hash that does not look like a sha256 (e.g. when the meta4 fetch failed).
+# Never in dry-run, never with -S, and never with a hash that does not look like a sha256 (e.g. when the meta4 fetch
+# failed).
 write_checksum_file() {
   [[ $DEBUG -eq 0 ]] || return 0
+  [[ $CHECKSUM_FILES -eq 1 ]] || return 0
   [[ "$2" =~ ^[0-9a-f]{64}$ ]] || return 0
   echo "$2 $1" >"$ZIMPath$1.sha256.tmp" && mv -f "$ZIMPath$1.sha256.tmp" "$ZIMPath$1.sha256"
 }
