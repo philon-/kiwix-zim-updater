@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # H8: self-update is opt-in (-U) and never touches a clone it should not.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

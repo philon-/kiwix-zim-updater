@@ -5,8 +5,6 @@
 #
 # Count the open findings with: grep -c 'skip "[FHMN][0-9]' test/*.bats
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

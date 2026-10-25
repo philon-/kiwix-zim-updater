@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # Downloads are staged in <name>.zim.part and renamed only once verified; --clean-partials.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

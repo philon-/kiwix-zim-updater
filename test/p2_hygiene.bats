@@ -2,8 +2,6 @@
 # Script hygiene: globals that leak in from the environment (M4), the ZIM
 # listing (M1) and the -S option (N4).
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

@@ -2,8 +2,6 @@
 # --library: a kiwix library XML file kept in sync with the verified ZIMs, for kiwix-serve --monitorLibrary.
 # kiwix-manage is a stub (test/helpers/bin/kiwix-manage) that writes the real format.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

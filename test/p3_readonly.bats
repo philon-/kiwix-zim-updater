@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # A ZIM directory that cannot be written forces dry-run; with -d that is a failure cron must see.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

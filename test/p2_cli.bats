@@ -2,8 +2,6 @@
 # Phase 2: command line parsing and the exit-code contract (H1, H2, H5).
 # 0 = ok or nothing to update, 1 = runtime error, 2 = usage error.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # Regression tests for the findings of the independent review (Phase 5, R1-R10).
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # Unit tests: source the sandboxed script (the source guard keeps main from running) and call its helpers directly.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

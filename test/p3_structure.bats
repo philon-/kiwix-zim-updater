@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # Phase 3: structure (source guard, main), removal of the legacy kiwix-zim.sh name.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

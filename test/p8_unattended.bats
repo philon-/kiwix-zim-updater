@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # Unattended operation: network limits, free-space reserve, behaviour without metadata.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

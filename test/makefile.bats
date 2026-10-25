@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # The Makefile's tool selection (dry runs only: nothing is executed).
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # Follow-ups after the reviews: size limits on resumes, -f -p size mismatch, checksum files after -c failures.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup

@@ -18,6 +18,8 @@ FIXTURES_SRC="$REPO_ROOT/test/fixtures"
 TEST_LIBS="$REPO_ROOT/test/libs"
 
 common_setup() {
+  # Every suite uses run --separate-stderr or run's status checks, which need bats 1.5 (else warning BW02)
+  bats_require_minimum_version 1.5.0
   load "$TEST_LIBS/bats-support/load"
   load "$TEST_LIBS/bats-assert/load"
 

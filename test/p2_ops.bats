@@ -2,8 +2,6 @@
 # Operational safeguards: dependency preflight (H7), the cached catalog
 # index (H4) and the lock on the ZIM directory (H6).
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup
