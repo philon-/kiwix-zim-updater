@@ -148,14 +148,8 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
 
 @test "H1: a catalog without remote files exits 1" {
   use_fixture_copy
-  cat >"$FAKE_FIXTURES/catalog.xml" <<'EOF'
-<feed>
-  <updated>__NOW__</updated>
-  <entry>
-    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/rootlevel_test_2026-01.zim.meta4" length="1024" />
-  </entry>
-</feed>
-EOF
+  printf '<feed>\n  <updated>__NOW__</updated>\n</feed>\n' >"$FAKE_FIXTURES/catalog.xml"
+  add_root_level_catalog_entry
   make_local_zim "$OLD_WP"
   run_updater "$ZIMS"
   assert_failure 1
@@ -286,8 +280,7 @@ EOF
 }
 
 @test "M3: the array-length mismatch message is printed in red" {
-  use_fixture_copy
-  sed -i 's#</feed>#  <entry>\n    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/rootlevel_test_2026-01.zim.meta4" length="1024" />\n  </entry>\n</feed>#' "$FAKE_FIXTURES/catalog.xml"
+  add_root_level_catalog_entry
   make_local_zim "$OLD_WP"
   run_updater "$ZIMS"
   assert_failure

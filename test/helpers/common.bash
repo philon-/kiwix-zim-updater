@@ -69,6 +69,13 @@ use_fixture_copy() {
   export FAKE_FIXTURES="$SANDBOX/fixtures"
 }
 
+# Add a catalog entry for a ZIM at the root of the download tree, outside any category (serving a fixture copy).
+add_root_level_catalog_entry() {
+  [[ "$FAKE_FIXTURES" == "$SANDBOX/fixtures" ]] || use_fixture_copy
+  local entry='  <entry>\n    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/rootlevel_test_2026-01.zim.meta4" length="1024" />\n  </entry>'
+  sed -i "s#</feed>#$entry\n</feed>#" "$FAKE_FIXTURES/catalog.xml"
+}
+
 # Path of a remote fixture file, e.g. remote_file zim/other/small_test_2025-12.zim
 remote_file() {
   printf '%s/remote/%s\n' "$FAKE_FIXTURES" "$1"
