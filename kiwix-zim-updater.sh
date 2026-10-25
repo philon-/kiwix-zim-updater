@@ -154,9 +154,6 @@ master_scrape() {
   # we have to add extra here so that we dont have to change the regexes
   ValidLibrary="$(echo "$ValidLibrary" | grep -iP "href=\"https?://[^/]+$REMOTE_FILE_REGEX")"
   ValidLibrary="$(echo "$ValidLibrary" | grep -iP "href=\"https?://[^/]+$BASE_REGEX")"
-  # these probably arent gonna be a problem so we will ignore them
-#  ValidLibrary="$(echo "$ValidLibrary" | grep -iP "$REMOTE_PATH_REGEX")"
-#  ValidLibrary="$(echo "$ValidLibrary" | grep -iP "$REMOTE_CATEGORY_REGEX")"
 
   IFS=$'\n' read -r -d '' -a FileSizes < <(echo "$ValidLibrary" | grep -ioP '(?<=length=")\d+(?=")')
   unset IFS
@@ -477,7 +474,6 @@ flags() {
   for ((i = 0; i < ${#LocalZIMArray[@]}; i++)); do                                             # Loop through local ZIM(s).
     LocalZIMNameArray[i]=$(basename "${LocalZIMArray[$i]}")                                   # Extract file name.
     filename=$(basename "${LocalZIMArray[$i]}" | grep -ioP "^[\w:\/\-.]+(?=$COMPLETE_ENDING_REGEX$)") # Extract file name.
-    #        IFS='_' read -ra fields <<< "${LocalZIMNameArray[$i]}"; unset IFS  # Break the filename into fields delimited by the underscore '_'
 
     # Search MasterZIMArray for the current local ZIM to discover the online Root (directory) for the URL
     for ((z = 0; z < ${#Basenames[@]}; z++)); do
@@ -823,7 +819,7 @@ main() {
         { [[ $# -lt 2 ]] || [[ "$2" == -* ]]; } && usage_error "$1 requires a country code"
         shift # discard -l argument
         if [[ "$1" =~ ^[A-Z]{2}$ ]]; then
-          COUNTRY_CODE=$1 # convert passed arg to bytes
+          COUNTRY_CODE=$1
         else
           COUNTRY_CODE=""
           CountryCodeWarning="Invalid country code '$1', falling back to default kiwix behavior"
@@ -912,7 +908,6 @@ main() {
   detect_wget_flavor
 
   # First, Self-Update Check.
-  # Shouldnt this be first? it is not dependent on anything else and resets everything, so may as well reset it before getting all invested?
   self_update
 
   # Second, Flag Check.
@@ -1057,7 +1052,6 @@ main() {
   echo -e "4. Downloading New ZIM(s)..." >> "$LOG_FILE"
   echo
 
-  # Let's clear out any possible duplicates
 
   # Let's Start the download process, but only if we have actual downloads to do.
   if [ $AnyDownloads -eq 1 ]; then
@@ -1151,8 +1145,6 @@ main() {
           echo "Incomplete download detected, resuming" >>"$LOG_FILE"
           echo -e "${YELLOW_REGULAR}    Status: Incomplete download detected, resuming${CLEAR}"
 
-          #                [[ $IsMirror -eq 0 ]] && echo -e "${BLUE_BOLD}  Download (direct) : $DownloadURL${CLEAR}"
-          #                [[ $IsMirror -eq 1 ]] && echo -e "${BLUE_BOLD}  Download (mirror) : $DownloadURL${CLEAR}"
           RequiresDownload=1
         elif [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] && [[ -f $TorrentFilePath ]]; then
           echo -e "${YELLOW_REGULAR}    Status: Torrent exists, skipping${CLEAR}"
@@ -1242,14 +1234,12 @@ main() {
             [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>"$LOG_FILE"
             [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>"$LOG_FILE"
 
-            #                    rm "$OldZIMPath.sha256"
 
             echo
             continue
           fi
           # Verified against its own checksum only (states 2, 3 and 4): there is nothing to download
           [[ ${LocalRequiresDownloadArray[$z]} -ne 1 ]] && continue
-          #                rm "$OldZIMPath.sha256"
         fi
       fi
       echo >>"$LOG_FILE"
@@ -1441,7 +1431,7 @@ main() {
         fi
       fi
 
-      # in all of these cases, we will not re-purge and will leave the lockfile so we know to resume later
+      # In all of these cases nothing is purged: a failed download stays in its .part file to be resumed next run
       if [[ $DownloadFailed -eq 1 ]] || [[ $SKIP_PURGE -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 1 ]]; then
         [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>"$LOG_FILE"
         [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>"$LOG_FILE"
@@ -1464,7 +1454,6 @@ main() {
           if [[ "$OldZIMPath" == "$NewZIMPath" ]]; then
             echo -e "${GREEN_BOLD}    ✓ Status : New ZIM downloaded successfully.${CLEAR}"
             echo "✓ Status : New ZIM downloaded successfully." >>"$LOG_FILE"
-            #                    rm "$OldZIMPath.sha256" 2>/dev/null # Purge old ZIM
           else
             echo -e "${GREEN_BOLD}    ✓ Status : New ZIM downloaded successfully. Old ZIM purged.${CLEAR}"
             echo "✓ Status : New ZIM downloaded successfully. Old ZIM purged." >>"$LOG_FILE"
