@@ -454,7 +454,7 @@ flags() {
   LocalZIMArray=("${LocalZIMArray[@]}")
 
   # Check that ZIM(s) were actually found/loaded.
-  if [ ${#LocalZIMArray[@]} -eq 0 ]; then # No ZIM(s) were found in the directory... I guess there's nothing else for us to do, so we'll Exit.
+  if [[ ${#LocalZIMArray[@]} -eq 0 ]]; then
     echo -e "${RED_REGULAR}  ✗ No ZIMs found. Exiting...${CLEAR}"
     exit 1
   else
@@ -955,7 +955,11 @@ main() {
     MatchingFileName=${RemoteFiles[$RemoteIndex]}
     MatchingCategory=${RemoteCategory[$RemoteIndex]}
 
-    [[ -f "$ZIMPath$MatchingFileName.torrent" ]] && [[ ! -f "$ZIMPath$MatchingFileName" ]] && echo -e "${YELLOW_REGULAR}    Torrent already downloaded\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalActionArray+=("$ACT_NONE") && continue
+    if [[ -f "$ZIMPath$MatchingFileName.torrent" ]] && [[ ! -f "$ZIMPath$MatchingFileName" ]]; then
+      echo -e "${YELLOW_REGULAR}    Torrent already downloaded\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n"
+      LocalActionArray+=("$ACT_NONE")
+      continue
+    fi
 
     MatchedDate="$(zim_date "$MatchingFileName")"
     LocalDate="$(zim_date "$FileName")"
@@ -988,7 +992,7 @@ main() {
       LocalActionArray+=("$ACT_NONE")
       echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Verification skipped due to file size ($SizeLimit, download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
     elif [[ "$MatchingFileName" == "$FileName" ]]; then
-      if [ $VERIFY_LIBRARY -eq 1 ]; then
+      if [[ $VERIFY_LIBRARY -eq 1 ]]; then
         LocalActionArray+=("$ACT_UPDATE")
         AnyDownloads=1
         echo -e "${GREEN_BOLD}    ✓ Online Version Found${CLEAR}"
@@ -997,7 +1001,7 @@ main() {
         echo "    ✗ No new update"
       fi
     else
-      if [ $VERIFY_LIBRARY -eq 1 ]; then
+      if [[ $VERIFY_LIBRARY -eq 1 ]]; then
         if [[ -f "$ZIMPath$FileName.sha256" ]]; then
           LocalActionArray+=("$ACT_VERIFY_CACHED")
           AnyDownloads=1
@@ -1039,7 +1043,7 @@ main() {
 
 
   # Let's Start the download process, but only if we have actual downloads to do.
-  if [ $AnyDownloads -eq 1 ]; then
+  if [[ $AnyDownloads -eq 1 ]]; then
     for ((z = 0; z < ${#LocalZIMArray[@]}; z++)); do # Iterate through the download queue.
       Action=${LocalActionArray[$z]}
       RemoteIndex=${LocalZIMRemoteIndexArray[$z]}
@@ -1096,7 +1100,7 @@ main() {
 
       RequiresDownload=0
 
-      if [ $VERIFY_LIBRARY -eq 0 ]; then
+      if [[ $VERIFY_LIBRARY -eq 0 ]]; then
         if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
           if [[ -f "$NewZIMPath" ]]; then
             echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM already exists on disk. Skipping download.${CLEAR}"
