@@ -203,7 +203,7 @@ head_of() {
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'has local changes: Not updating'
-  [[ -f "$SANDBOX/clone/untracked.txt" ]]
+  assert_exists "$SANDBOX/clone/untracked.txt"
   run grep -E 'pull|stash' "$FAKE_GIT_LOG"
   assert_output ''
 }

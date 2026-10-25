@@ -58,7 +58,7 @@ setup() {
   make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater "$ZIMS"
   assert_success
-  [[ -f "$RUN_DIR/kiwix-index" ]]
+  assert_exists "$RUN_DIR/kiwix-index"
   run head -1 "$RUN_DIR/kiwix-index"
   assert_output --regexp '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$'
   run grep -c 'application/x-zim' "$RUN_DIR/kiwix-index"

@@ -43,8 +43,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_output --partial 'Download (mirror) : https://mirror.kiwix.test/zim/wikipedia/wikipedia_en_test_2026-01.zim'
   assert_output --partial 'New ZIM downloaded successfully. Old ZIM purged.'
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ ! -e "$ZIMS/$OLD_WP" ]]
-  [[ ! -e "$ZIMS/$OLD_WP.sha256" ]]
+  refute_exists "$ZIMS/$OLD_WP"
+  refute_exists "$ZIMS/$OLD_WP.sha256"
   run cat "$ZIMS/$NEW_WP.sha256"
   assert_output "$(cut -d' ' -f1 <"$(remote_file "$WP_REMOTE.sha256")") $NEW_WP"
   (cd "$ZIMS" && sha256sum --status -c "$NEW_WP.sha256")
@@ -71,7 +71,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_success
   assert_output --partial 'Checksum passed'
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ ! -e "$ZIMS/$OLD_WP" ]]
+  refute_exists "$ZIMS/$OLD_WP"
 }
 
 @test "download: -d -c with a corrupt download removes the new ZIM and keeps the old one" {
@@ -79,9 +79,9 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
   run_updater -d -c "$ZIMS"
   assert_output --partial 'Checksum failed, removing corrupt download'
-  [[ -f "$ZIMS/$OLD_WP" ]]
-  [[ ! -e "$ZIMS/$NEW_WP" ]]
-  [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
+  assert_exists "$ZIMS/$OLD_WP"
+  refute_exists "$ZIMS/$NEW_WP"
+  refute_exists "$ZIMS/$NEW_WP.sha256"
   run find "$ZIMS" -name '.~lock.*'
   assert_output ''
   run download_log
@@ -96,8 +96,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_success
   assert_output --partial 'ZIM download was interrupted. Continuing...'
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ ! -e "$ZIMS/$OLD_WP" ]]
-  [[ ! -e "$ZIMS/.~lock.$NEW_WP" ]]
+  refute_exists "$ZIMS/$OLD_WP"
+  refute_exists "$ZIMS/.~lock.$NEW_WP"
 }
 
 @test "download: -d -p keeps the old ZIM next to the new one" {
@@ -105,7 +105,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d -p "$ZIMS"
   assert_success
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ -f "$ZIMS/$OLD_WP" ]]
+  assert_exists "$ZIMS/$OLD_WP"
   run find "$ZIMS" -name '.~lock.*'
   assert_output ''
 }
@@ -150,9 +150,9 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_success
   assert_output --partial "Download (direct) : https://download.kiwix.test/$WP_REMOTE.torrent"
   cmp "$ZIMS/$NEW_WP.torrent" "$(remote_file "$WP_REMOTE.torrent")"
-  [[ -f "$ZIMS/$OLD_WP" ]]
-  [[ ! -e "$ZIMS/$NEW_WP" ]]
-  [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
+  assert_exists "$ZIMS/$OLD_WP"
+  refute_exists "$ZIMS/$NEW_WP"
+  refute_exists "$ZIMS/$NEW_WP.sha256"
   run wget_downloads
   assert_output "--connect-timeout=30 --read-timeout=300 --tries=3 -q --show-progress --progress=bar:force -c -O $ZIMS/$NEW_WP.torrent https://download.kiwix.test/$WP_REMOTE.torrent"
 }
@@ -200,6 +200,6 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   export FAKE_WGET_FAIL=wikipedia_en_test_2026-01.zim.torrent
   run_updater -d -t "$ZIMS"
   assert_output --partial 'Torrent download failed'
-  [[ ! -e "$ZIMS/$NEW_WP.torrent" ]]
-  [[ -f "$ZIMS/$OLD_WP" ]]
+  refute_exists "$ZIMS/$NEW_WP.torrent"
+  assert_exists "$ZIMS/$OLD_WP"
 }

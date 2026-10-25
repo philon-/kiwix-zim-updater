@@ -34,8 +34,8 @@ GiB=1073741824
   assert_output --partial 'Download skipped, not enough free space'
   assert_output --partial 'must stay free (--min-free)'
   assert_zim_unchanged "$WOLD"
-  [[ ! -e "$ZIMS/$W" ]]
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W"
+  refute_exists "$ZIMS/$W.part"
   run wget_downloads
   assert_output ''
 }
@@ -71,7 +71,7 @@ GiB=1073741824
   run_updater -d --min-free 2Gi "$ZIMS"
   assert_failure 1
   assert_output --partial '2.0Gi must stay free'
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W.part"
 }
 
 @test "free space: an invalid --min-free is a usage error" {
@@ -103,7 +103,7 @@ GiB=1073741824
   run wget_downloads
   assert_output ''
   assert_zim_unchanged "$WOLD"
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W.part"
 }
 
 @test "internet outage: a -d run fails with exit 1 and leaves the ZIM directory byte-for-byte unchanged" {
@@ -118,7 +118,7 @@ GiB=1073741824
   run_updater -d -g "$ZIMS"
   assert_failure 1
   assert_equal "$(cd "$ZIMS" && find . -type f -exec sha256sum {} + | LC_ALL=C sort)" "$before"
-  [[ -s "$RUN_DIR/kiwix-index" ]]
+  assert_nonempty "$RUN_DIR/kiwix-index"
 }
 
 @test "internet outage: -f -d -c --clean-partials changes nothing either" {

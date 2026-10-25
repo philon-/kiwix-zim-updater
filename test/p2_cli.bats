@@ -45,7 +45,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d -c "$ZIMS"
   assert_success
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ ! -e "$ZIMS/$OLD_WP" ]]
+  refute_exists "$ZIMS/$OLD_WP"
 }
 
 @test "p2-cli: nothing to update exits 0" {
@@ -62,9 +62,9 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'One or more downloads failed'
-  [[ -f "$ZIMS/$OLD_WP" ]]
+  assert_exists "$ZIMS/$OLD_WP"
   cmp "$ZIMS/wiktionary_fr_test_2026-02a.zim" "$(remote_file zim/wiktionary/wiktionary_fr_test_2026-02a.zim)"
-  [[ ! -e "$ZIMS/wiktionary_fr_test_2026-02.zim" ]]
+  refute_exists "$ZIMS/wiktionary_fr_test_2026-02.zim"
 }
 
 @test "p2-cli: a failed torrent download exits 1" {
@@ -204,10 +204,10 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
   run_updater -d "$ZIMS"
   assert_failure 1
-  [[ -s "$ZIMS/$NEW_WP.part" ]]
-  [[ ! -e "$ZIMS/$NEW_WP" ]]
-  [[ ! -e "$ZIMS/.~lock.$NEW_WP" ]]
-  [[ -f "$ZIMS/$OLD_WP" ]]
+  assert_nonempty "$ZIMS/$NEW_WP.part"
+  refute_exists "$ZIMS/$NEW_WP"
+  refute_exists "$ZIMS/.~lock.$NEW_WP"
+  assert_exists "$ZIMS/$OLD_WP"
   assert_output --partial "Keeping interrupted download for the next run to resume: $ZIMS/$NEW_WP.part"
 }
 
@@ -224,8 +224,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run wget_downloads
   assert_output --partial ' -c '
   cmp "$ZIMS/$NEW_WP" "$(remote_file zim/wikipedia/wikipedia_en_test_2026-01.zim)"
-  [[ ! -e "$ZIMS/$OLD_WP" ]]
-  [[ ! -e "$ZIMS/.~lock.$NEW_WP" ]]
+  refute_exists "$ZIMS/$OLD_WP"
+  refute_exists "$ZIMS/.~lock.$NEW_WP"
 }
 
 @test "N7a: a download that is too large is not kept for resuming" {
@@ -236,8 +236,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_failure 1
   assert_output --partial 'it is larger than published and cannot be resumed'
-  [[ ! -e "$ZIMS/$NEW_WP.part" ]]
-  [[ ! -e "$ZIMS/.~lock.$NEW_WP" ]]
-  [[ ! -e "$ZIMS/$NEW_WP" ]]
-  [[ -f "$ZIMS/$OLD_WP" ]]
+  refute_exists "$ZIMS/$NEW_WP.part"
+  refute_exists "$ZIMS/.~lock.$NEW_WP"
+  refute_exists "$ZIMS/$NEW_WP"
+  assert_exists "$ZIMS/$OLD_WP"
 }

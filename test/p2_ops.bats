@@ -248,7 +248,7 @@ age_index() {
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'no <updated> date'
-  [[ ! -e "$RUN_DIR/$INDEX" ]]
+  refute_exists "$RUN_DIR/$INDEX"
 }
 
 @test "H4: a catalog without ZIM links exits 1 and does not replace the index" {

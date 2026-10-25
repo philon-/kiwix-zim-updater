@@ -95,8 +95,8 @@ listed() {
   make_local_zim "$WOLD"
   run_updater --library "$LIB" "$ZIMS"
   assert_success
-  [[ ! -e "$LIB" ]]
-  [[ ! -s "$FAKE_KIWIX_MANAGE_LOG" ]]
+  refute_exists "$LIB"
+  refute_nonempty "$FAKE_KIWIX_MANAGE_LOG"
 }
 
 @test "library: an unreadable ZIM is reported and left out, the others are listed" {
@@ -156,7 +156,7 @@ listed() {
   make_local_zim "$WOLD"
   run_updater -d --library lib.xml "$ZIMS"
   assert_success
-  [[ -f "$RUN_DIR/lib.xml" ]]
+  assert_exists "$RUN_DIR/lib.xml"
   run grep -o 'path="[^"]*"' "$RUN_DIR/lib.xml"
   assert_output "path=\"../zims/$W\""
 }

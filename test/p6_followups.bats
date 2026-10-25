@@ -22,7 +22,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_success
   assert_output --partial 'outside the -n/-x size limits. Left as it is.'
   assert_zim_unchanged "$BIG"
-  [[ -f "$ZIMS/.~lock.$BIG" ]]
+  assert_exists "$ZIMS/.~lock.$BIG"
   run wget_downloads
   assert_output ''
 }
@@ -37,7 +37,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$BIG" "$(remote_file "$BIG_REMOTE")"
-  [[ ! -e "$ZIMS/.~lock.$BIG" ]]
+  refute_exists "$ZIMS/.~lock.$BIG"
 }
 
 @test "-f -d -p: a truncated current ZIM is reported and kept, without a download-failed report" {
@@ -68,9 +68,9 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   export FAKE_WGET_CORRUPT="$W"
   run_updater -d -c "$ZIMS"
   assert_failure 1
-  [[ ! -e "$ZIMS/$W" ]]
-  [[ ! -e "$ZIMS/$W.sha256" ]]
-  [[ -f "$ZIMS/$WOLD" ]]
+  refute_exists "$ZIMS/$W"
+  refute_exists "$ZIMS/$W.sha256"
+  assert_exists "$ZIMS/$WOLD"
 }
 
 @test "checksum files: a download that passes -c gets its checksum file" {

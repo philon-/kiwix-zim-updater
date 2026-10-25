@@ -41,8 +41,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ -f "$ZIMS/$W.sha256" ]]
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  assert_exists "$ZIMS/$W.sha256"
+  refute_exists "$ZIMS/.~lock.$W"
   run wget_downloads
   assert_output ''
 }
@@ -54,8 +54,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/$WOLD" ]]
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  refute_exists "$ZIMS/$WOLD"
+  refute_exists "$ZIMS/.~lock.$W"
 }
 
 @test "R2: a shorter interrupted download whose resume fails is kept for the next run" {
@@ -66,9 +66,9 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
   assert_failure 1
   # The old-style locked partial next to an older version becomes a .part file and is kept for resuming
-  [[ -s "$ZIMS/$W.part" ]]
-  [[ ! -e "$ZIMS/$W" ]]
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  assert_nonempty "$ZIMS/$W.part"
+  refute_exists "$ZIMS/$W"
+  refute_exists "$ZIMS/.~lock.$W"
   assert_zim_unchanged "$WOLD"
 }
 
@@ -88,8 +88,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/$WOLD" ]]
-  [[ ! -e "$ZIMS/.~lock.$WOLD" ]]
+  refute_exists "$ZIMS/$WOLD"
+  refute_exists "$ZIMS/.~lock.$WOLD"
 }
 
 @test "R6: a partial left by an earlier run is kept when this run does not touch it" {
@@ -99,14 +99,14 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   touch "$ZIMS/.~lock.big_test_2026-03.zim"
   run_updater -d -x 2Ki "$ZIMS"
   assert_success
-  [[ -s "$ZIMS/big_test_2026-03.zim" ]]
-  [[ -f "$ZIMS/.~lock.big_test_2026-03.zim" ]]
+  assert_nonempty "$ZIMS/big_test_2026-03.zim"
+  assert_exists "$ZIMS/.~lock.big_test_2026-03.zim"
   # ...and a later run without the size limit resumes and finishes it
   run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/big_test_2026-03.zim" "$(remote_file zim/other/big_test_2026-03.zim)"
-  [[ ! -e "$ZIMS/.~lock.big_test_2026-03.zim" ]]
-  [[ ! -e "$ZIMS/big_test_2025-01.zim" ]]
+  refute_exists "$ZIMS/.~lock.big_test_2026-03.zim"
+  refute_exists "$ZIMS/big_test_2025-01.zim"
 }
 
 @test "R6: a stale lock without its download is removed, with its orphaned checksum" {
@@ -115,8 +115,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   printf '%064d ghost_test_2026-01.zim\n' 0 >"$ZIMS/ghost_test_2026-01.zim.sha256"
   run_updater -d "$ZIMS"
   assert_success
-  [[ ! -e "$ZIMS/.~lock.ghost_test_2026-01.zim" ]]
-  [[ ! -e "$ZIMS/ghost_test_2026-01.zim.sha256" ]]
+  refute_exists "$ZIMS/.~lock.ghost_test_2026-01.zim"
+  refute_exists "$ZIMS/ghost_test_2026-01.zim.sha256"
 }
 
 @test "R10: -f -d -p finishing an interrupted current download prints no 'cannot remove'" {
@@ -125,7 +125,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater --separate-stderr -f -d -p "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  refute_exists "$ZIMS/.~lock.$W"
   [[ "$stderr" != *"cannot remove"* ]]
 }
 
@@ -153,7 +153,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   touch "$ZIMS/.~lock.$WOLD"
   run_updater -f -d -p "$ZIMS"
   assert_zim_unchanged "$WOLD.sha256"
-  [[ -f "$ZIMS/$WOLD" ]]
+  assert_exists "$ZIMS/$WOLD"
 }
 
 @test "R5: -f -d does not resume an update download for an outdated ZIM it checks by cached checksum" {
@@ -167,7 +167,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   refute_output --partial 'resuming'
   refute_output --partial 'removing corrupt file'
   assert_zim_unchanged "$W"
-  [[ -f "$ZIMS/.~lock.$W" ]]
+  assert_exists "$ZIMS/.~lock.$W"
   run wget_downloads
   assert_output ''
 }
@@ -179,7 +179,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_success
   assert_output --partial 'Incomplete download detected, resuming'
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  refute_exists "$ZIMS/.~lock.$W"
 }
 
 @test "R7: dry-run -f exits 1 for a truncated current ZIM, like for a corrupt outdated one" {
@@ -243,7 +243,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_output --partial 'Interrupted download is already complete, verifying it'
   assert_output --partial 'Checksum passed'
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  refute_exists "$ZIMS/.~lock.$W"
   run wget_downloads
   assert_output ''
 }
@@ -257,7 +257,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_failure 1
   assert_output --partial 'Checksum failed'
   assert_zim_unchanged "$WOLD"
-  [[ ! -e "$ZIMS/$W" ]]
+  refute_exists "$ZIMS/$W"
 }
 
 @test "N12: offline -f -d keeps a current ZIM that fails its cached checksum (no replacement can be verified)" {
@@ -274,7 +274,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_output --partial 'Checksum failed against the cached checksum. File kept'
   assert_zim_unchanged "$W"
   assert_zim_unchanged "$W.sha256"
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  refute_exists "$ZIMS/.~lock.$W"
   run wget_downloads
   assert_output ''
 }

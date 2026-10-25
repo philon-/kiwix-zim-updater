@@ -28,8 +28,8 @@ setup() {
   printf 'stale' >"$SANDBOX/out"
   run wget -q -O "$SANDBOX/out" 'https://mirror.kiwix.test/zim/nope/nope_2026-01.zim'
   assert_failure 8
-  [[ -f "$SANDBOX/out" ]]
-  [[ ! -s "$SANDBOX/out" ]]
+  assert_exists "$SANDBOX/out"
+  refute_nonempty "$SANDBOX/out"
 }
 
 @test "stubs: wget --spider reports existence via exit status only" {
@@ -134,5 +134,5 @@ setup() {
   assert_output 'keep'
   FAKE_WGET_NETFAIL=small_test run wget -q -O "$SANDBOX/new.zim" https://mirror.kiwix.test/zim/other/small_test_2025-12.zim
   assert_failure 4
-  [[ ! -e "$SANDBOX/new.zim" ]]
+  refute_exists "$SANDBOX/new.zim"
 }

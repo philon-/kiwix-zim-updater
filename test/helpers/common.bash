@@ -145,6 +145,24 @@ make_tooldir() {
   TOOLDIR="$tooldir"
 }
 
+# File checks that name the path when they fail:
+#   assert_exists <path>     a regular file exists at <path>
+#   assert_nonempty <path>   a non-empty regular file exists at <path>
+#   refute_exists <path>     nothing exists at <path>
+#   refute_nonempty <path>   nothing, or only an empty file, exists at <path>
+assert_exists() {
+  [[ -f "$1" ]] || fail "expected a file at $1"
+}
+assert_nonempty() {
+  [[ -f "$1" && -s "$1" ]] || fail "expected a non-empty file at $1"
+}
+refute_exists() {
+  [[ ! -e "$1" ]] || fail "expected nothing at $1"
+}
+refute_nonempty() {
+  [[ ! -s "$1" ]] || fail "expected nothing or an empty file at $1: $(head -c 500 "$1")"
+}
+
 # keep_copy <name> - keep a pristine copy of a file in the ZIM directory, for assert_zim_unchanged after the run.
 keep_copy() {
   cp "$ZIMS/$1" "$SANDBOX/$1.orig"

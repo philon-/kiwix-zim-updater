@@ -228,7 +228,7 @@ assert_fixture_arrays() {
   run cat "$FAKE_WGET_LOG"
   assert_line --index 0 --partial 'opds.library.kiwix.org'
   refute_line --index 1 --regexp '.'
-  [[ -f "$INDEX_FILE" ]]
+  assert_exists "$INDEX_FILE"
 }
 
 @test "master_scrape: a second call uses the cached index without fetching the catalog" {
@@ -237,7 +237,7 @@ assert_fixture_arrays() {
   RemoteFiles=() Basenames=() RemotePaths=() RemoteCategory=() FileSizes=() BaseURL=''
   scrape
   assert_fixture_arrays
-  [[ ! -s "$FAKE_WGET_LOG" ]]
+  refute_nonempty "$FAKE_WGET_LOG"
 }
 
 ###############################################################################

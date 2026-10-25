@@ -23,7 +23,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ ! -e "$ZIMS/$OLD_WP" ]]
+  refute_exists "$ZIMS/$OLD_WP"
 }
 
 @test "M4: SKIP_PURGE in the environment is never evaluated as arithmetic" {
@@ -31,7 +31,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   export SKIP_PURGE="x[\$(touch '$SANDBOX/pwned')]"
   run_updater -d "$ZIMS"
   assert_success
-  [[ ! -e "$SANDBOX/pwned" ]]
+  refute_exists "$SANDBOX/pwned"
 }
 
 @test "M4: COUNTRY_CODE in the environment does not reach the meta4 request" {
@@ -113,7 +113,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -f -d -S "$ZIMS"
   assert_success
   assert_output --partial 'Checksum passed'
-  [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
+  refute_exists "$ZIMS/$NEW_WP.sha256"
   run find "$ZIMS" -name '*.sha256*'
   assert_output ''
 }

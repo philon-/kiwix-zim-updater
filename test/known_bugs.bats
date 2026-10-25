@@ -53,9 +53,9 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
   make_local_zim "$OLD_WT"
   export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
   run_updater -d -c "$ZIMS"
-  [[ -f "$ZIMS/$OLD_WP" ]]
+  assert_exists "$ZIMS/$OLD_WP"
   cmp "$ZIMS/$NEW_WT" "$(remote_file "$WT_REMOTE")"
-  [[ ! -e "$ZIMS/$OLD_WT" ]]
+  refute_exists "$ZIMS/$OLD_WT"
 }
 
 @test "F3: a checksum failure leaves no 0-byte ZIM behind" {
@@ -81,8 +81,8 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
   export FAKE_WGET_META_FAIL=1
   run_updater -d "$ZIMS"
   # Without metadata the download cannot be verified (F1), so no checksum may be written at all
-  [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
-  [[ -f "$ZIMS/$OLD_WP" ]]
+  refute_exists "$ZIMS/$NEW_WP.sha256"
+  assert_exists "$ZIMS/$OLD_WP"
 }
 
 @test "F4: -f -d with a failed meta4 fetch keeps a good cached .sha256" {
@@ -99,7 +99,7 @@ WT_REMOTE=zim/wiktionary/wiktionary_fr_test_2026-02a.zim
   printf 'unrelated' >"$RUN_DIR/$NEW_WP"
   run_updater -d "$ZIMS"
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ ! -e "$ZIMS/$OLD_WP" ]]
+  refute_exists "$ZIMS/$OLD_WP"
   run cat "$RUN_DIR/$NEW_WP"
   assert_output 'unrelated'
 }
@@ -189,10 +189,10 @@ EOF
   run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'You appear to be on a different branch'
-  [[ -f "$RUN_DIR/download.log" ]]
-  [[ -f "$RUN_DIR/kiwix-index" ]]
-  [[ ! -e "$SANDBOX/bin/download.log" ]]
-  [[ ! -e "$SANDBOX/bin/kiwix-index" ]]
+  assert_exists "$RUN_DIR/download.log"
+  assert_exists "$RUN_DIR/kiwix-index"
+  refute_exists "$SANDBOX/bin/download.log"
+  refute_exists "$SANDBOX/bin/kiwix-index"
   run download_log
   assert_line '3. Processing ZIM(s)...'
 }
@@ -204,10 +204,10 @@ EOF
   run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'Version: Current'
-  [[ -f "$RUN_DIR/download.log" ]]
-  [[ -f "$RUN_DIR/kiwix-index" ]]
-  [[ ! -e "$SANDBOX/bin/download.log" ]]
-  [[ ! -e "$SANDBOX/bin/kiwix-index" ]]
+  assert_exists "$RUN_DIR/download.log"
+  assert_exists "$RUN_DIR/kiwix-index"
+  refute_exists "$SANDBOX/bin/download.log"
+  refute_exists "$SANDBOX/bin/kiwix-index"
 }
 
 @test "H4: a failed catalog fetch exits 1 and caches no kiwix-index" {
@@ -215,7 +215,7 @@ EOF
   export FAKE_WGET_CATALOG_FAIL=1
   run_updater "$ZIMS"
   assert_failure 1
-  [[ ! -e "$RUN_DIR/kiwix-index" ]]
+  refute_exists "$RUN_DIR/kiwix-index"
 }
 
 @test "H5: -n without a value exits 2" {
@@ -284,7 +284,7 @@ EOF
   make_local_zim "$OLD_WP"
   run_updater "$ZIMS"
   assert_success
-  [[ ! -s "$FAKE_CLEAR_LOG" ]]
+  refute_nonempty "$FAKE_CLEAR_LOG"
 }
 
 @test "M3: the array-length mismatch message is printed in red" {
@@ -306,7 +306,7 @@ EOF
   assert_success
   assert_output --partial 'Download (mirror) : https://mirror.kiwix.test/'
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ ! -e "$ZIMS/$OLD_WP" ]]
+  refute_exists "$ZIMS/$OLD_WP"
 }
 
 @test "N2: -f -d never deletes an unmatched ZIM that has a valid own checksum" {
@@ -361,7 +361,7 @@ EOF
   run_updater -d -S "$ZIMS"
   assert_success
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
-  [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
+  refute_exists "$ZIMS/$NEW_WP.sha256"
 }
 
 @test "N5: -f checks an outdated ZIM against its own online checksum, not the new release's" {

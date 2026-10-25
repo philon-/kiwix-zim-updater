@@ -17,8 +17,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d -c "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/$W.part" ]]
-  [[ ! -e "$ZIMS/$WOLD" ]]
+  refute_exists "$ZIMS/$W.part"
+  refute_exists "$ZIMS/$WOLD"
 }
 
 @test "part: a failed download never produces a file under the new ZIM's name" {
@@ -26,9 +26,9 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   export FAKE_WGET_FAIL="$W"
   run_updater -d "$ZIMS"
   assert_failure 1
-  [[ ! -e "$ZIMS/$W" ]]
-  [[ -s "$ZIMS/$W.part" ]]
-  [[ -f "$ZIMS/$WOLD" ]]
+  refute_exists "$ZIMS/$W"
+  assert_nonempty "$ZIMS/$W.part"
+  assert_exists "$ZIMS/$WOLD"
 }
 
 @test "part: a short download (wget exit 0) stays a .part file" {
@@ -36,8 +36,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   export FAKE_WGET_SHORT="$W"
   run_updater -d "$ZIMS"
   assert_failure 1
-  [[ ! -e "$ZIMS/$W" ]]
-  [[ -s "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W"
+  assert_nonempty "$ZIMS/$W.part"
 }
 
 @test "part: a download that fails -c is removed, nothing is left under the new name" {
@@ -45,9 +45,9 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   export FAKE_WGET_CORRUPT="$W"
   run_updater -d -c "$ZIMS"
   assert_failure 1
-  [[ ! -e "$ZIMS/$W" ]]
-  [[ ! -e "$ZIMS/$W.part" ]]
-  [[ -f "$ZIMS/$WOLD" ]]
+  refute_exists "$ZIMS/$W"
+  refute_exists "$ZIMS/$W.part"
+  assert_exists "$ZIMS/$WOLD"
 }
 
 @test "part: the next run resumes the .part file and completes the update" {
@@ -59,8 +59,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run wget_downloads
   assert_output --partial "-c -O $ZIMS/$W.part"
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/$W.part" ]]
-  [[ ! -e "$ZIMS/$WOLD" ]]
+  refute_exists "$ZIMS/$W.part"
+  refute_exists "$ZIMS/$WOLD"
 }
 
 @test "part: a complete .part (run killed while hashing) is verified and renamed without downloading" {
@@ -73,7 +73,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run wget_downloads
   assert_output ''
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W.part"
 }
 
 @test "part: a .part larger than published is started over" {
@@ -83,7 +83,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_success
   assert_output --partial 'is larger than published, starting the download over'
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W.part"
 }
 
 @test "part: a dry-run never creates a .part file" {
@@ -104,7 +104,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_failure 1
   assert_output --partial 'Checksum failed, downloading a replacement'
   assert_zim_unchanged "$W"
-  [[ -s "$ZIMS/$W.part" ]]
+  assert_nonempty "$ZIMS/$W.part"
 }
 
 @test "part: -f -d replaces a corrupt current ZIM once the replacement is verified" {
@@ -113,7 +113,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -f -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W.part"
   run cat "$ZIMS/$W.sha256"
   assert_output "$(cut -d' ' -f1 "$(remote_file "$WREMOTE.sha256")") $W"
 }
@@ -125,9 +125,9 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
-  [[ ! -e "$ZIMS/$W.part" ]]
-  [[ ! -e "$ZIMS/$WOLD" ]]
+  refute_exists "$ZIMS/.~lock.$W"
+  refute_exists "$ZIMS/$W.part"
+  refute_exists "$ZIMS/$WOLD"
 }
 
 @test "part: a lone old-style locked partial stays in place until its replacement is verified" {
@@ -137,14 +137,14 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_failure 1
   # Still under its own name with its lock (it keeps the ZIM in the listing); nothing was written into it
-  [[ -s "$ZIMS/$W" ]]
-  [[ -f "$ZIMS/.~lock.$W" ]]
-  [[ ! -e "$ZIMS/$W.part" ]]
+  assert_nonempty "$ZIMS/$W"
+  assert_exists "$ZIMS/.~lock.$W"
+  refute_exists "$ZIMS/$W.part"
   unset FAKE_WGET_NETFAIL
   run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  refute_exists "$ZIMS/.~lock.$W"
 }
 
 ###############################################################################
@@ -156,7 +156,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_success
   assert_output --partial "can no longer be used: $ZIMS/wikipedia_en_test_2025-06.zim.part (--clean-partials removes it)"
-  [[ -f "$ZIMS/wikipedia_en_test_2025-06.zim.part" ]]
+  assert_exists "$ZIMS/wikipedia_en_test_2025-06.zim.part"
 }
 
 @test "clean-partials: removes a .part of a release no longer in the catalog" {
@@ -165,7 +165,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d --clean-partials "$ZIMS"
   assert_success
   assert_output --partial "Removing unfinished download that can no longer be used: $ZIMS/wikipedia_en_test_2025-06.zim.part"
-  [[ ! -e "$ZIMS/wikipedia_en_test_2025-06.zim.part" ]]
+  refute_exists "$ZIMS/wikipedia_en_test_2025-06.zim.part"
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
 }
 
@@ -175,7 +175,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -f -d --clean-partials "$ZIMS"
   assert_success
   assert_output --partial 'Checksum passed'
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W.part"
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
 }
 
@@ -185,7 +185,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d --clean-partials "$ZIMS"
   assert_success
   assert_output --partial 'Nothing to download'
-  [[ ! -e "$ZIMS/wikipedia_en_test_2025-06.zim.part" ]]
+  refute_exists "$ZIMS/wikipedia_en_test_2025-06.zim.part"
 }
 
 @test "clean-partials: keeps the resumable replacement of a corrupt ZIM between runs" {
@@ -194,7 +194,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   # A -f run starts the replacement and is interrupted
   FAKE_WGET_FAIL="$W" run_updater -f -d "$ZIMS"
   assert_failure 1
-  [[ -s "$ZIMS/$W.part" ]]
+  assert_nonempty "$ZIMS/$W.part"
   keep_copy "$W.part"
   # The nightly run with --clean-partials must leave it for the next -f run
   run_updater -d --clean-partials "$ZIMS"
@@ -204,7 +204,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -f -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/$W.part"
 }
 
 @test "clean-partials: keeps a .part that a later run can still resume (outside -x)" {
@@ -213,7 +213,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d -x 2Ki --clean-partials "$ZIMS"
   assert_success
   assert_output --partial "Keeping unfinished download for a later run to resume: $ZIMS/big_test_2026-03.zim.part"
-  [[ -s "$ZIMS/big_test_2026-03.zim.part" ]]
+  assert_nonempty "$ZIMS/big_test_2026-03.zim.part"
 }
 
 @test "clean-partials: never touches files behind an old-style lock" {
@@ -224,7 +224,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_success
   assert_output --partial 'Keeping an interrupted download left by an older version of this script'
   assert_zim_unchanged "$WOLD"
-  [[ -f "$ZIMS/.~lock.$WOLD" ]]
+  assert_exists "$ZIMS/.~lock.$WOLD"
 }
 
 @test "clean-partials: in dry-run it only lists what it would remove" {
@@ -233,7 +233,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater --clean-partials "$ZIMS"
   assert_success
   assert_output --partial '*** Simulated *** Removing unfinished download that can no longer be used'
-  [[ -f "$ZIMS/wikipedia_en_test_2025-06.zim.part" ]]
+  assert_exists "$ZIMS/wikipedia_en_test_2025-06.zim.part"
 }
 
 @test "docs: the README usage block matches the -h output" {
@@ -253,8 +253,8 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_output --partial "-O $ZIMS/$W.part"
   refute_output --partial "-O $ZIMS/$W "
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
-  [[ ! -e "$ZIMS/$W.part" ]]
+  refute_exists "$ZIMS/.~lock.$W"
+  refute_exists "$ZIMS/$W.part"
 }
 
 @test "part: a lone old-style locked file is never written to, even when the replacement fails" {
@@ -265,7 +265,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -d "$ZIMS"
   assert_failure 1
   assert_zim_unchanged "$W"
-  [[ -f "$ZIMS/.~lock.$W" ]]
+  assert_exists "$ZIMS/.~lock.$W"
 }
 
 @test "part: a complete lone old-style locked file that fails -c is kept and becomes a normal ZIM" {
@@ -276,7 +276,7 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_failure 1
   assert_output --partial 'run with -f to replace it'
   assert_zim_unchanged "$W"
-  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  refute_exists "$ZIMS/.~lock.$W"
   # ...and -f then replaces it with a verified download
   run_updater -f -d "$ZIMS"
   assert_success
@@ -292,5 +292,5 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run wget_downloads
   refute_output --partial "-O $ZIMS/wiktionary_fr_test_2026-02a.zim "
   cmp "$ZIMS/wiktionary_fr_test_2026-02a.zim" "$(remote_file zim/wiktionary/wiktionary_fr_test_2026-02a.zim)"
-  [[ ! -e "$ZIMS/wiktionary_fr_test_2026-02.zim" ]]
+  refute_exists "$ZIMS/wiktionary_fr_test_2026-02.zim"
 }

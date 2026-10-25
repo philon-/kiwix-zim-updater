@@ -28,8 +28,8 @@ OLD_WP=wikipedia_en_test_2025-12.zim
   assert_success
   assert_output 'sourced-ok'
   assert_equal "$(cd "$SANDBOX" && find . -printf '%P\n' | LC_ALL=C sort)" "$before"
-  [[ ! -s "$FAKE_WGET_LOG" ]]
-  [[ ! -s "$FAKE_GIT_LOG" ]]
+  refute_nonempty "$FAKE_WGET_LOG"
+  refute_nonempty "$FAKE_GIT_LOG"
 }
 
 @test "structure: sourcing does not change the caller's shell options" {
@@ -45,5 +45,5 @@ OLD_WP=wikipedia_en_test_2025-12.zim
   assert_output --partial 'No new update'
   run wget_downloads
   assert_output ''
-  [[ -f "$ZIMS/wikipedia_en_test_2026-01.ZIM" ]]
+  assert_exists "$ZIMS/wikipedia_en_test_2026-01.ZIM"
 }
