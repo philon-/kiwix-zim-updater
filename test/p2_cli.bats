@@ -171,3 +171,27 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run grep -c 'meta4?country=$' "$FAKE_WGET_LOG"
   assert_output '1'
 }
+
+###############################################################################
+# N: new defects found while working on Phase 2 (skipped until fixed)
+
+@test "N6a: -f -d exits 1 when it finds a corrupt ZIM it has to keep" {
+  skip "N6a: a failed -f verification that keeps the file is not reflected in the exit code"
+  make_local_zim orphan_test_2025-01.zim 'orphan payload'
+  make_local_sha256 orphan_test_2025-01.zim
+  printf 'tampered' >"$ZIMS/orphan_test_2025-01.zim"
+  run_updater -f -d "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'Checksum failed, but no online version to replace it with'
+}
+
+@test "N7a: a failed download keeps its partial file and lock so the next run resumes it" {
+  skip "N7a: step 5 cleanup deletes the partial download and its lock in the same run"
+  make_local_zim "$OLD_WP"
+  export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
+  run_updater -d "$ZIMS"
+  assert_failure 1
+  [[ -f "$ZIMS/.~lock.$NEW_WP" ]]
+  [[ -s "$ZIMS/$NEW_WP" ]]
+  [[ -f "$ZIMS/$OLD_WP" ]]
+}
