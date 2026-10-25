@@ -226,28 +226,24 @@ EOF
 }
 
 @test "H5: -n without a value exits 2" {
-  skip "H5: numfmt fails silently and the size limit is dropped"
   make_local_zim "$OLD_WP"
   run_updater "$ZIMS" -n
   assert_failure 2
 }
 
 @test "H5: -n with a garbage value exits 2" {
-  skip "H5: numfmt fails silently and the size limit is dropped"
   make_local_zim "$OLD_WP"
   run_updater -n banana "$ZIMS"
   assert_failure 2
 }
 
 @test "H5: -x with a garbage value exits 2" {
-  skip "H5: numfmt fails silently and the size limit is dropped"
   make_local_zim "$OLD_WP"
   run_updater -x 12parsecs "$ZIMS"
   assert_failure 2
 }
 
 @test "H5: an unknown --option exits 2 with usage" {
-  skip "H5: unknown options become positionals and are ignored"
   make_local_zim "$OLD_WP"
   run_updater "$ZIMS" --bogus
   assert_failure 2
@@ -255,7 +251,6 @@ EOF
 }
 
 @test "H5: two positional arguments exit 2" {
-  skip "H5: extra positionals are silently ignored"
   mkdir "$SANDBOX/other"
   make_local_zim "$OLD_WP"
   run_updater "$ZIMS" "$SANDBOX/other"
@@ -263,7 +258,6 @@ EOF
 }
 
 @test "H5: an invalid -l country code warns on stderr" {
-  skip "H5: the invalid -l fallback is only written to download.log"
   make_local_zim "$OLD_WP"
   run_updater --separate-stderr -l nope "$ZIMS"
   assert_success

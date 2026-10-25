@@ -99,3 +99,75 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run cat "$FAKE_WGET_LOG"
   assert_output ''
 }
+
+###############################################################################
+# argument validation (H5)
+
+@test "p2-cli: -n with a valid size (1G) is accepted" {
+  make_local_zim "$OLD_WP"
+  run_updater -n 1G "$ZIMS"
+  assert_success
+  assert_output --partial 'Update skipped (minimum'
+}
+
+@test "p2-cli: -x with a valid binary size (2Ki) is accepted" {
+  make_local_zim big_test_2026-01.zim
+  run_updater -x 2Ki "$ZIMS"
+  assert_success
+  # numfmt prints the locale's decimal separator.
+  assert_output --regexp 'Update skipped \(maximum: 2[.,]0Ki'
+}
+
+@test "p2-cli: -x without a value exits 2 with usage on stderr" {
+  make_local_zim "$OLD_WP"
+  run_updater --separate-stderr "$ZIMS" -x
+  assert_failure 2
+  [[ "$stderr" == *'-x requires a size'* ]]
+  [[ "$stderr" == *'Usage:'* ]]
+  run cat "$FAKE_WGET_LOG"
+  assert_output ''
+}
+
+@test "p2-cli: -n followed by another option exits 2" {
+  make_local_zim "$OLD_WP"
+  run_updater -n -d "$ZIMS"
+  assert_failure 2
+  assert_output --partial "Invalid minimum size: '-d'"
+}
+
+@test "p2-cli: a fractional byte size exits 2" {
+  make_local_zim "$OLD_WP"
+  run_updater -n 1.5 "$ZIMS"
+  assert_failure 2
+}
+
+@test "p2-cli: an unknown short option exits 2 with usage" {
+  make_local_zim "$OLD_WP"
+  run_updater -z "$ZIMS"
+  assert_failure 2
+  assert_output --partial 'Unknown option: -z'
+  assert_output --partial 'Usage:'
+}
+
+@test "p2-cli: -l without a value exits 2" {
+  make_local_zim "$OLD_WP"
+  run_updater "$ZIMS" -l
+  assert_failure 2
+  assert_output --partial '-l requires a country code'
+}
+
+@test "p2-cli: -l followed by another option exits 2 instead of eating it" {
+  make_local_zim "$OLD_WP"
+  run_updater -l -d "$ZIMS"
+  assert_failure 2
+  assert_output --partial '-l requires a country code'
+}
+
+@test "p2-cli: an invalid -l code still falls back and runs" {
+  make_local_zim "$OLD_WP"
+  run_updater --separate-stderr -l se "$ZIMS"
+  assert_success
+  [[ "$stderr" == *"Invalid country code 'se'"* ]]
+  run grep -c 'meta4?country=$' "$FAKE_WGET_LOG"
+  assert_output '1'
+}

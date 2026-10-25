@@ -267,6 +267,13 @@ usage_example() {
   exit "$status"
 }
 
+# usage_error <message> - Report a bad command line on stderr, show the usage and exit 2
+usage_error() {
+  echo -e "${RED_REGULAR}  ✗ $1${CLEAR}" >&2
+  echo >&2
+  usage_example 2
+}
+
 # flags - Flag and ZIM Processing Functions
 flags() {
   echo -e "${YELLOW_BOLD}2. Preprocessing...${CLEAR}"
@@ -474,6 +481,7 @@ mirror_search() {
 # Begin Script Execute
 #########################
 
+CountryCodeWarning="" # shown after the screen is cleared
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h | --help)
@@ -492,21 +500,27 @@ while [[ $# -gt 0 ]]; do
       shift # discard argument
       ;;
     -n | --min-size)
+      [[ $# -lt 2 ]] && usage_error "$1 requires a size"
       shift                               # discard -n argument
-      MIN_SIZE=$(numfmt --from=auto "$1") # convert passed arg to bytes
+      MIN_SIZE=$(numfmt --from=auto "$1" 2>/dev/null) # convert passed arg to bytes
+      [[ "$MIN_SIZE" =~ ^[0-9]+$ ]] || usage_error "Invalid minimum size: '$1'"
       shift                               # discard value
       ;;
     -x | --max-size)
+      [[ $# -lt 2 ]] && usage_error "$1 requires a size"
       shift                               # discard -x argument
-      MAX_SIZE=$(numfmt --from=auto "$1") # convert passed arg to bytes
+      MAX_SIZE=$(numfmt --from=auto "$1" 2>/dev/null) # convert passed arg to bytes
+      [[ "$MAX_SIZE" =~ ^[0-9]+$ ]] || usage_error "Invalid maximum size: '$1'"
       shift                               # discard value
       ;;
     -l | --location)
+      { [[ $# -lt 2 ]] || [[ "$2" == -* ]]; } && usage_error "$1 requires a country code"
       shift # discard -l argument
       if [[ "$1" =~ ^[A-Z]{2}$ ]]; then
         COUNTRY_CODE=$1 # convert passed arg to bytes
       else
         COUNTRY_CODE=""
+        CountryCodeWarning="Invalid country code '$1', falling back to default kiwix behavior"
         echo "Invalid country code, falling back to default kiwix behavior" >> "$LOG_FILE"
       fi
       shift # discard value
@@ -540,6 +554,9 @@ while [[ $# -gt 0 ]]; do
       CHECKSUM_FILES=0
       shift
       ;;
+    -*)
+      usage_error "Unknown option: $1"
+      ;;
     *)
       # We can either parse the arg here, or just tuck it away for safekeeping
       POSITIONAL_ARGS+=("$1") # save positional arg
@@ -548,6 +565,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+[[ ${#POSITIONAL_ARGS[@]} -gt 1 ]] && usage_error "Only one ZIM directory can be given, got ${#POSITIONAL_ARGS[@]}: ${POSITIONAL_ARGS[*]}"
 set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters that we skipped earlier
 
 clear # Clear screen
@@ -556,6 +574,7 @@ if [[ $CALCULATE_CHECKSUM -ne 0 ]] && [[ $DOWNLOAD_METHOD -ne 1 ]]; then
   echo -e "${RED_BOLD}Calculating Checksum not available with torrenting. Aborting.${CLEAR}" >&2
   exit 2
 fi
+[[ -n "$CountryCodeWarning" ]] && echo -e "${YELLOW_BOLD}$CountryCodeWarning${CLEAR}" >&2
 
 # Display Header
 echo "=========================================="
