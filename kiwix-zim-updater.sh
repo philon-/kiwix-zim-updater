@@ -894,7 +894,6 @@ if [ $AnyDownloads -eq 1 ]; then
       elif [[ $DEBUG -eq 0 ]] && (cd "$ZIMPath" && ! sha256sum --status -c "$NewZIM.sha256"); then
         echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt file${CLEAR}"
         rm "$NewZIMPath"
-        touch "$NewZIMPath"
         DownloadFailed=1
       else
         if [[ $DEBUG -eq 0 ]]; then

@@ -64,7 +64,6 @@ keep_copy() {
 }
 
 @test "F3: a checksum failure leaves no 0-byte ZIM behind" {
-  skip "F3: the corrupt file is rm'd and then touch'ed, leaving an empty ZIM"
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   printf 'X' | dd of="$ZIMS/$NEW_WP" bs=1 seek=10 conv=notrunc status=none
   export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
