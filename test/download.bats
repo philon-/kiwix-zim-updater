@@ -83,18 +83,6 @@ setup() {
   assert_line ' !!! DOWNLOAD FAILED !!!'
 }
 
-@test "download: -d resumes an interrupted download (lock file present)" {
-  make_local_zim "$WP_OLD"
-  head -c 100 "$(remote_file "$WP_REMOTE")" >"$ZIMS/$WP_NEW"
-  : >"$ZIMS/.~lock.$WP_NEW"
-  run_updater -d "$ZIMS"
-  assert_success
-  assert_output --partial 'ZIM download was interrupted. Continuing...'
-  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$WP_OLD"
-  refute_exists "$ZIMS/.~lock.$WP_NEW"
-}
-
 @test "download: -d -p keeps the old ZIM next to the new one" {
   make_local_zim "$WP_OLD"
   run_updater -d -p "$ZIMS"

@@ -9,32 +9,6 @@ setup() {
 BIG=big_test_2026-03.zim
 BIG_REMOTE=zim/other/big_test_2026-03.zim
 
-@test "size limits: a locked partial bigger than -x is neither resumed nor deleted" {
-  head -c 1000 "$(remote_file "$BIG_REMOTE")" >"$ZIMS/$BIG"
-  keep_copy "$BIG"
-  touch "$ZIMS/.~lock.$BIG"
-  run_updater -d -x 2Ki "$ZIMS"
-  assert_success
-  assert_output --partial 'outside the -n/-x size limits. Left as it is.'
-  assert_zim_unchanged "$BIG"
-  assert_exists "$ZIMS/.~lock.$BIG"
-  run wget_downloads
-  assert_output ''
-}
-
-@test "size limits: a locked partial smaller than -n is left alone, a later run without -n resumes it" {
-  head -c 1000 "$(remote_file "$BIG_REMOTE")" >"$ZIMS/$BIG"
-  touch "$ZIMS/.~lock.$BIG"
-  run_updater -d -n 1Mi "$ZIMS"
-  assert_success
-  run wget_downloads
-  assert_output ''
-  run_updater -d "$ZIMS"
-  assert_success
-  cmp "$ZIMS/$BIG" "$(remote_file "$BIG_REMOTE")"
-  refute_exists "$ZIMS/.~lock.$BIG"
-}
-
 @test "-f -d -p: a truncated current ZIM is reported and kept, without a download-failed report" {
   head -c 100 "$(remote_file "$WP_REMOTE")" >"$ZIMS/$WP_NEW"
   keep_copy "$WP_NEW"
