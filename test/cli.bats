@@ -40,7 +40,7 @@ setup() {
 
 @test "cli: without a .git next to the script, self-update is skipped and git never runs" {
   make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
-  run_updater "$ZIMS"
+  run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'Git Clone Not Detected: Skipping Update Check'
   run cat "$FAKE_GIT_LOG"

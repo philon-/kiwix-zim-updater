@@ -192,7 +192,7 @@ EOF
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=other-branch
   make_local_zim "$OLD_WP"
-  run_updater "$ZIMS"
+  run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'You appear to be on a different branch'
   [[ -f "$RUN_DIR/download.log" ]]
@@ -207,7 +207,7 @@ EOF
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=current
   make_local_zim "$OLD_WP"
-  run_updater "$ZIMS"
+  run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'Version: Current'
   [[ -f "$RUN_DIR/download.log" ]]

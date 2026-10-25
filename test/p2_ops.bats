@@ -73,16 +73,16 @@ EOF
   make_tooldir git
   mkdir "$SANDBOX/bin/.git"
   make_local_zim "$OLD_WP"
-  PATH="$TOOLDIR" run_updater "$ZIMS"
+  PATH="$TOOLDIR" run_updater -U "$ZIMS"
   assert_failure 1
   assert_output --partial 'git'
 }
 
-@test "H7: git is not required with -u" {
+@test "H7: git is not required without -U, even in a git clone" {
   make_tooldir git
   mkdir "$SANDBOX/bin/.git"
   make_local_zim "$OLD_WP"
-  PATH="$TOOLDIR" run_updater -u "$ZIMS"
+  PATH="$TOOLDIR" run_updater "$ZIMS"
   assert_success
   refute_output --partial 'Missing required tool'
 }
@@ -90,7 +90,7 @@ EOF
 @test "H7: git is not required outside a git clone" {
   make_tooldir git
   make_local_zim "$OLD_WP"
-  PATH="$TOOLDIR" run_updater "$ZIMS"
+  PATH="$TOOLDIR" run_updater -U "$ZIMS"
   assert_success
   refute_output --partial 'Missing required tool'
 }

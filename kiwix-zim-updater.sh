@@ -36,7 +36,7 @@ SCRIPTPATH="$(dirname "$SCRIPT")"
 CALLEDSCRIPTNAME="$0"
 ARGS=("$@")
 BRANCH="main"
-SKIP_UPDATE=0
+SELF_UPDATE=0 # -U: update this script from its git clone before running (off by default)
 DEBUG=1 # This forces the script to default to "dry-run/simulation mode"
 MIN_SIZE=0
 MAX_SIZE=0
@@ -214,10 +214,10 @@ self_update() {
   # Check if script path is a git clone.
   #   If true, then check for update.
   #   If false, skip self-update check/function.
-  if [ $SKIP_UPDATE -eq 1 ]; then
-    echo -e "${YELLOW_REGULAR}   Check Skipped${CLEAR}"
-    echo "Check Skipped" >> "$LOG_FILE"
-  elif [[ -d "$SCRIPTPATH/.git" ]]; then
+  if [[ $SELF_UPDATE -ne 1 ]]; then
+    echo -e "${YELLOW_REGULAR}   Check Skipped (use -U to enable)${CLEAR}"
+    echo "Check Skipped (use -U to enable)" >> "$LOG_FILE"
+  elif [[ -e "$SCRIPTPATH/.git" ]]; then
     echo -e "${GREEN_BOLD}   ✓ Git Clone Detected: Checking Script Version...${CLEAR}"
     echo "✓ Git Clone Detected: Checking Script Version..." >> "$LOG_FILE"
     [[ $(timeout 1s git -C "$SCRIPTPATH" rev-parse --abbrev-ref HEAD) != "$BRANCH" ]] && echo -e "${YELLOW_BOLD}     You appear to be on a different branch so I will assume you are developing and do not want an update${CLEAR}" && echo && return
@@ -262,7 +262,8 @@ usage_example() {
   echo ''
   echo 'Universal Options:'
   echo '    -h, --help                 Show this usage and exit.'
-  echo '    -u, --skip-update          Skips checking for script updates (very useful for development).'
+  echo '    -U, --self-update          Updates this script from its git clone before running (off by default).'
+  echo '    -u, --skip-update          Accepted for compatibility; self-update is now off unless -U is given.'
   echo '    -g, --get-index            Forces using remote index rather than cached index. Cache auto clears after one day'
   echo '    -n <size>, --min-size      Minimum ZIM Size to be downloaded.'
   echo '                               Specify units include M Mi G Gi, etc. See `man numfmt`'
@@ -457,7 +458,7 @@ check_dependencies() {
   # The parsing relies on Perl-compatible regular expressions, which not every grep has
   echo x | grep -qP 'x' 2>/dev/null || missing+=("grep -P")
   # git is only needed when the self-update would actually run
-  if [[ $SKIP_UPDATE -eq 0 ]] && [[ -d "$SCRIPTPATH/.git" ]]; then
+  if [[ $SELF_UPDATE -eq 1 ]] && [[ -e "$SCRIPTPATH/.git" ]]; then
     command -v git >/dev/null 2>&1 || missing+=("git")
   fi
   if [[ ${#missing[@]} -gt 0 ]]; then
@@ -593,9 +594,12 @@ while [[ $# -gt 0 ]]; do
       CALCULATE_CHECKSUM=1
       shift
       ;;
-    -u | --skip-update)
-      SKIP_UPDATE=1
+    -U | --self-update)
+      SELF_UPDATE=1
       shift
+      ;;
+    -u | --skip-update)
+      shift # no-op since self-update became opt-in (-U); still accepted so existing cron lines keep working
       ;;
     -g | --get-index)
       FORCE_FETCH_INDEX=1
