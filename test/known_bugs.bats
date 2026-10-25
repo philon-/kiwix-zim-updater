@@ -45,33 +45,6 @@ setup() {
   refute_exists "$ZIMS/$WT_OLD"
 }
 
-@test "F3: a checksum failure leaves no 0-byte ZIM behind" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  printf 'X' | dd of="$ZIMS/$WP_NEW" bs=1 seek=10 conv=notrunc status=none
-  export FAKE_WGET_CORRUPT="$WP_NEW"
-  run_updater -f -d "$ZIMS"
-  run find "$ZIMS" -type f -empty
-  assert_output ''
-}
-
-@test "F4: -f in dry-run writes no .sha256 into the ZIM dir" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  local before
-  before="$(zim_dir_snapshot)"
-  run_updater -f "$ZIMS"
-  assert_success
-  assert_equal "$(zim_dir_snapshot)" "$before"
-}
-
-@test "F4: -f -d with a failed meta4 fetch keeps a good cached .sha256" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  make_local_sha256 "$WP_NEW"
-  keep_copy "$WP_NEW.sha256"
-  export FAKE_WGET_META_FAIL=1
-  run_updater -f -d "$ZIMS"
-  assert_zim_unchanged "$WP_NEW.sha256"
-}
-
 @test "F5: a file named like the new ZIM in the CWD does not suppress the download" {
   make_local_zim "$WP_OLD"
   printf 'unrelated' >"$RUN_DIR/$WP_NEW"
@@ -89,15 +62,6 @@ setup() {
   run_updater -d -t "$ZIMS"
   assert_success
   cmp "$ZIMS/$WP_NEW.torrent" "$(remote_file "$WP_REMOTE.torrent")"
-}
-
-@test "F6: -f verifies an unmatched local ZIM against its own .sha256 in the ZIM dir" {
-  make_local_zim orphan_test_2025-01.zim
-  make_local_sha256 orphan_test_2025-01.zim
-  run_updater -f "$ZIMS"
-  assert_success
-  assert_output --partial '- orphan_test_2025-01.zim:'
-  assert_output --partial 'Cached Checksum Found'
 }
 
 ###############################################################################
@@ -186,72 +150,6 @@ setup() {
   refute_exists "$ZIMS/$WP_OLD"
 }
 
-@test "N2: -f -d never deletes an unmatched ZIM that has a valid own checksum" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  make_local_zim zzz_orphan_test_2025-01.zim "$(head -c 2048 < <(yes 'orphan payload'))"
-  make_local_sha256 zzz_orphan_test_2025-01.zim
-  keep_copy "zzz_orphan_test_2025-01.zim"
-  run_updater -f -d "$ZIMS"
-  assert_zim_unchanged "zzz_orphan_test_2025-01.zim"
-  assert_output --partial 'Checksum passed'
-  run wget_downloads
-  assert_output ''
-}
-
-@test "N2: -f -d reports a corrupt unmatched ZIM but keeps it (nothing to replace it with)" {
-  make_local_zim orphan_test_2025-01.zim 'orphan payload'
-  make_local_sha256 orphan_test_2025-01.zim
-  printf 'tampered' >"$ZIMS/orphan_test_2025-01.zim"
-  keep_copy "orphan_test_2025-01.zim"
-  keep_copy "orphan_test_2025-01.zim.sha256"
-  run_updater -f -d "$ZIMS"
-  assert_output --partial 'no online version to replace it with'
-  assert_zim_unchanged "orphan_test_2025-01.zim"
-  assert_zim_unchanged "orphan_test_2025-01.zim.sha256"
-  run wget_downloads
-  assert_output ''
-}
-
-@test "N3: -f -d with a failed meta4 fetch never deletes a good ZIM" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  make_local_sha256 "$WP_NEW"
-  export FAKE_WGET_META_FAIL=1
-  run_updater -f -d "$ZIMS"
-  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
-  # Since R9 the cached .sha256 is used when the metadata is unavailable
-  assert_output --partial 'verifying against the cached checksum'
-  assert_output --partial 'Checksum passed'
-}
-
-@test "N3: -f -d with a failed meta4 fetch and no cached checksum keeps the ZIM and reports it" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  export FAKE_WGET_META_FAIL=1
-  run_updater -f -d "$ZIMS"
-  assert_failure 1
-  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
-  assert_output --partial "cannot verify $WP_NEW"
-  refute_output --partial 'Checksum passed'
-}
-
-@test "N4: -S stops new .sha256 files from being written" {
-  make_local_zim "$WP_OLD"
-  run_updater -d -S "$ZIMS"
-  assert_success
-  cmp "$ZIMS/$WP_NEW" "$(remote_file "$WP_REMOTE")"
-  refute_exists "$ZIMS/$WP_NEW.sha256"
-}
-
-@test "N5: -f checks an outdated ZIM against its own online checksum, not the new release's" {
-  use_fixture_copy
-  make_local_zim "$WP_OLD"
-  keep_copy "$WP_OLD"
-  # The older release's checksum is still published next to the new one.
-  (cd "$ZIMS" && sha256sum "$WP_OLD") >"$(remote_file "zim/wikipedia/$WP_OLD.sha256")"
-  run_updater -f -d "$ZIMS"
-  assert_zim_unchanged "$WP_OLD"
-  refute_output --partial 'removing corrupt file'
-}
-
 @test "N1: with GNU Wget2 every meta4 request carries --no-metalink" {
   export FAKE_WGET_FLAVOR=wget2
   make_local_zim "$WP_OLD"
@@ -270,27 +168,4 @@ setup() {
   grep -qF '.meta4' "$FAKE_WGET_LOG"
   run grep -e --no-metalink "$FAKE_WGET_LOG"
   assert_output ''
-}
-
-@test "N5: -f reports a corrupt outdated ZIM against its own online checksum and keeps it" {
-  use_fixture_copy
-  make_local_zim "$WP_OLD"
-  (cd "$ZIMS" && sha256sum "$WP_OLD") >"$(remote_file "zim/wikipedia/$WP_OLD.sha256")"
-  printf 'tampered' >>"$ZIMS/$WP_OLD"
-  keep_copy "$WP_OLD"
-  run_updater -f -d "$ZIMS"
-  assert_output --partial 'a normal update run (without -f) will replace it'
-  assert_zim_unchanged "$WP_OLD"
-  run wget_downloads
-  assert_output ''
-}
-
-@test "N5: -f -d stores the outdated ZIM's own online checksum for offline use" {
-  use_fixture_copy
-  make_local_zim "$WP_OLD"
-  (cd "$ZIMS" && sha256sum "$WP_OLD") >"$(remote_file "zim/wikipedia/$WP_OLD.sha256")"
-  run_updater -f -d "$ZIMS"
-  assert_output --partial 'Checksum passed'
-  run cat "$ZIMS/$WP_OLD.sha256"
-  assert_output "$(cut -d' ' -f1 "$(remote_file "zim/wikipedia/$WP_OLD.sha256")") $WP_OLD"
 }

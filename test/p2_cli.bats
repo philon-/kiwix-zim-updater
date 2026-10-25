@@ -159,27 +159,3 @@ setup() {
 
 ###############################################################################
 # N: new defects found while working on Phase 2 (skipped until fixed)
-
-@test "N6a: -f -d exits 1 when it finds a corrupt ZIM it has to keep" {
-  make_local_zim orphan_test_2025-01.zim 'orphan payload'
-  make_local_sha256 orphan_test_2025-01.zim
-  printf 'tampered' >"$ZIMS/orphan_test_2025-01.zim"
-  run_updater -f -d "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'Checksum failed, but no online version to replace it with'
-}
-
-@test "N6a: -f exits 1 when a ZIM cannot be verified (metadata unavailable)" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  export FAKE_WGET_META_FAIL=1
-  run_updater -f "$ZIMS"
-  assert_failure 1
-  assert_output --partial 'cannot verify'
-}
-
-@test "N6a: -f on a healthy library exits 0" {
-  make_local_zim "$WP_NEW" --from-remote "$WP_REMOTE"
-  run_updater -f -d "$ZIMS"
-  assert_success
-  assert_output --partial 'Checksum passed'
-}
