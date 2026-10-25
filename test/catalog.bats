@@ -168,6 +168,8 @@ age_index() {
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'Too many zim base urls found'
+  run download_log
+  assert_output --partial 'Too many zim base urls found'
 }
 
 @test "a catalog entry outside any category aborts with a red array-length mismatch (M3)" {
@@ -177,4 +179,6 @@ age_index() {
   assert_failure 1
   assert_output --partial 'CRITICAL ERROR!'
   assert_output --partial $'\033[0;31mParsed array lengths did not match. Aborting to prevent data loss'
+  run download_log
+  assert_output --partial 'Parsed array lengths did not match'
 }

@@ -184,10 +184,10 @@ master_scrape() {
   FoundURLs=$(echo "$BaseURL" | wc -l)
 
   if [[ -z "$BaseURL" ]]; then
-    echo -e "${RED_REGULAR}  ✗ No ZIM URLs found. Exiting...${CLEAR}"
+    say "${RED_REGULAR}" "  ✗ No ZIM URLs found. Exiting..."
     exit 1
   elif [[ $FoundURLs -ne 1 ]]; then
-    echo -e "${RED_REGULAR}  ✗ Too many zim base urls found. Please open an issue on github. Exiting...${CLEAR}"
+    say "${RED_REGULAR}" "  ✗ Too many zim base urls found. Please open an issue on github. Exiting..."
     exit 1
   else
     BaseURL="$BaseURL/zim/"
@@ -212,8 +212,8 @@ master_scrape() {
     [[ ${#RemoteFiles[@]} -ne ${#RemotePaths[@]} ]] || \
     [[ ${#RemoteFiles[@]} -ne ${#RemoteCategory[@]} ]] || \
     [[ ${#RemoteFiles[@]} -ne ${#FileSizes[@]} ]] ; then
-    echo -e "${RED_BOLD}CRITICAL ERROR!${CLEAR}"
-    echo -e "${RED_REGULAR}Parsed array lengths did not match. Aborting to prevent data loss${CLEAR}"
+    say "${RED_BOLD}" "CRITICAL ERROR!"
+    say "${RED_REGULAR}" "Parsed array lengths did not match. Aborting to prevent data loss"
     exit 1
   fi
 
@@ -471,7 +471,7 @@ list_local_zims() {
 
   # Check that ZIM(s) were actually found/loaded.
   if [[ ${#LocalZIMArray[@]} -eq 0 ]]; then
-    echo -e "${RED_REGULAR}  ✗ No ZIMs found. Exiting...${CLEAR}"
+    say "${RED_REGULAR}" "  ✗ No ZIMs found. Exiting..."
     exit 1
   else
     echo -e "${GREEN_BOLD}  ✓ Valid ZIM Directory ${CLEAR}"

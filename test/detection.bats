@@ -96,6 +96,8 @@ setup() {
   run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'No ZIMs found. Exiting...'
+  run download_log
+  assert_output --partial 'No ZIMs found. Exiting...'
 }
 
 @test "a local ZIM without a catalog entry has no online match" {
