@@ -309,7 +309,7 @@ make lint    # ShellCheck the script and the test harness
 
 `make lint` uses `shellcheck` when it is installed and otherwise runs the pinned `koalaman/shellcheck` container image with `podman`. CI (GitHub Actions) runs `make lint` and `make test` on every push and pull request.
 
-`make docker-test` builds the container image with `podman` (or `docker`; set `CONTAINER_ENGINE` to choose) and smoke-tests it offline with the stubs below, with no network in the containers. CI runs it with Docker. It is not part of `make test`.
+`make docker-test` builds the container image with `podman` (or `docker`; set `CONTAINER_ENGINE` to choose) and smoke-tests it offline with the stubs below, with no network in the containers. `make library-test` checks `--library` end to end: it builds small real ZIMs, maintains the library with the image's own code, and serves it with the official `ghcr.io/kiwix/kiwix-serve` image to confirm that updates are picked up without a restart. CI runs both with Docker. Neither is part of `make test`.
 
 The tests never touch the network, your ZIMs or this repository. Each test copies the script into its own temporary sandbox outside the repository, runs it from a temporary directory against a temporary ZIM directory, and puts stubs from `test/helpers/bin/` first on `PATH`:
 

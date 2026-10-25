@@ -14,7 +14,7 @@ endif
 # Files checked at SHELLCHECK_SEVERITY (the script and the container scripts, default: every finding)
 # and at the default severity (everything written for the test harness).
 SCRIPT := kiwix-zim-updater.sh
-DOCKER_SCRIPTS := docker/docker-entrypoint.sh docker/healthcheck.sh test/docker-smoke.sh
+DOCKER_SCRIPTS := docker/docker-entrypoint.sh docker/healthcheck.sh test/docker-smoke.sh test/library-integration.sh
 HARNESS_SCRIPTS := $(wildcard test/helpers/bin/*) $(wildcard test/fixtures/build.sh)
 HARNESS_LIBS := $(wildcard test/helpers/*.bash)
 
@@ -22,7 +22,7 @@ HARNESS_LIBS := $(wildcard test/helpers/*.bash)
 CONTAINER_ENGINE ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
 IMAGE ?= localhost/kiwix-zim-updater:test
 
-.PHONY: all test lint docker-test
+.PHONY: all test lint docker-test library-test
 
 all: lint test
 
@@ -37,3 +37,7 @@ lint:
 # Build the container image and smoke-test it offline with the test stubs. Not part of `make test`.
 docker-test:
 	CONTAINER_ENGINE="$(CONTAINER_ENGINE)" IMAGE="$(IMAGE)" test/docker-smoke.sh
+
+# End-to-end test of --library with real ZIMs, the image's kiwix-manage and the official kiwix-serve image.
+library-test:
+	CONTAINER_ENGINE="$(CONTAINER_ENGINE)" IMAGE="$(IMAGE)" test/library-integration.sh

@@ -37,3 +37,6 @@ jobs:
 
       - name: Build the image and smoke-test it offline
         run: make docker-test CONTAINER_ENGINE=docker
+
+      - name: Library test (real ZIMs, official kiwix-serve)
+        run: make library-test CONTAINER_ENGINE=docker
