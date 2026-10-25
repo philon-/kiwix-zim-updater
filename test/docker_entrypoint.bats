@@ -74,6 +74,7 @@ wait_for() {
 }
 
 at_least_runs() { [[ "$(stub_runs)" -ge "$1" ]]; }
+bg_stopped() { ! kill -0 "$BG_PID" 2>/dev/null; }
 
 process_gone() { ! kill -0 "$1" 2>/dev/null; }
 
@@ -252,6 +253,37 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
   run env RUN_INTERVAL=once STUB_EXIT=1 "$ENTRYPOINT"
   assert_line --regexp '^\[docker-entrypoint\] [0-9TZ:-]+ run 1 started: fake-updater -w -c --clean-partials /data$'
   assert_line --regexp '^\[docker-entrypoint\] [0-9TZ:-]+ run 1 failed: exit 1'
+}
+
+@test "entrypoint: when last-run cannot be written the loop stops with exit 1 instead of looking healthy" {
+  # A previous successful run is on record; this run fails, but its status cannot replace the record
+  printf 'exit=0 time=2026-01-01T00:00:00Z\n' >"$STATUS_FILE"
+  rm -f "$STATUS_FILE" && mkdir "$STATUS_FILE"
+  run timeout 20 env STUB_EXIT=1 RUN_INTERVAL=1s "$ENTRYPOINT"
+  assert_failure 1
+  assert_output --partial 'could not record run 1 (exit 1)'
+  [[ "$(stub_runs)" -eq 1 ]]
+  [[ -z "$(ls -A "$STATUS_FILE")" ]]
+}
+
+@test "entrypoint: a run whose status cannot be written is not followed by another one" {
+  [[ $EUID -ne 0 ]] || skip "root can write to read-only directories"
+  # STATE_DIR must be writable at start; make it read-only only once the first run is under way
+  STUB_SLEEP=2 RUN_INTERVAL=1s "$ENTRYPOINT" >"$SANDBOX/out" 2>&1 3>&- &
+  BG_PID=$!
+  wait_for 15 at_least_runs 1
+  chmod a-w "$STATE_DIR"
+  # Bounded: with the bug the loop would go on forever
+  local status=0 stopped=0
+  wait_for 15 bg_stopped && stopped=1
+  chmod u+w "$STATE_DIR"
+  [[ $stopped -eq 1 ]] || { kill -TERM "$BG_PID"; wait "$BG_PID"; BG_PID=""; false; }
+  wait "$BG_PID" || status=$?
+  BG_PID=""
+  [[ "$status" -eq 1 ]]
+  [[ "$(stub_runs)" -eq 1 ]]
+  run cat "$SANDBOX/out"
+  assert_output --partial 'could not record run 1'
 }
 
 @test "entrypoint: last-run records the exit code and UTC time of the run" {

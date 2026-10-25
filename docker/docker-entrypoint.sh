@@ -161,17 +161,18 @@ run_updater() {
   child_pid=""
 }
 
-# write_status <exit code> - Record the finished run in $STATUS_FILE, atomically for healthcheck.sh
+# write_status <exit code> - Record the finished run in $STATUS_FILE, atomically for healthcheck.sh. Returns 1 when it
+# cannot (-T: a directory in its place must be an error, not a place to move the file into).
 write_status() {
   local line tmp
   line="exit=$1 time=$(utc_now)"
   [[ -n "$stop_signal" ]] && line+=" interrupted=$stop_signal"
   tmp="$STATUS_FILE.tmp.$$"
-  if printf '%s\n' "$line" >"$tmp" && mv -f "$tmp" "$STATUS_FILE"; then
+  if printf '%s\n' "$line" >"$tmp" 2>/dev/null && mv -fT "$tmp" "$STATUS_FILE" 2>/dev/null; then
     return 0
   fi
-  rm -f "$tmp"
-  log "warning: could not write $STATUS_FILE"
+  rm -f "$tmp" 2>/dev/null
+  return 1
 }
 
 main() {
@@ -204,7 +205,12 @@ main() {
     log "run $run started: $(basename "$KIWIX_ZIM_UPDATER") ${updater_args[*]}"
     run_updater "${updater_args[@]}"
     status="$run_status"
-    write_status "$status"
+    if ! write_status "$status"; then
+      # A stale or missing record would let the health check report the wrong state: stop, so the failure shows (the
+      # restart policy then makes it visible as a restarting container)
+      log "error: could not record run $run (exit $status) in $STATUS_FILE; stopping"
+      exit 1
+    fi
     if [[ -n "$stop_signal" ]]; then
       log "run $run interrupted by SIG$stop_signal (exit $status); an unfinished download is resumed by the next run"
       exit "$status"
