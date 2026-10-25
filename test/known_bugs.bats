@@ -85,10 +85,9 @@ keep_copy() {
   make_local_zim "$OLD_WP"
   export FAKE_WGET_META_FAIL=1
   run_updater -d "$ZIMS"
-  if [[ -e "$ZIMS/$NEW_WP.sha256" ]]; then
-    run cat "$ZIMS/$NEW_WP.sha256"
-    assert_output --regexp "^[0-9a-f]{64} +$NEW_WP\$"
-  fi
+  # Without metadata the download cannot be verified (F1), so no checksum may be written at all
+  [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
+  [[ -f "$ZIMS/$OLD_WP" ]]
 }
 
 @test "F4: -f -d with a failed meta4 fetch keeps a good cached .sha256" {
