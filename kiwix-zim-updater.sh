@@ -336,8 +336,8 @@ usage_example() {
   echo '    -c, --calculate-checksum   Verifies that the downloaded files were not corrupted, but can take a while for large downloads.'
   echo '    -p, --skip-purge           Skips purging any replaced ZIMs.'
   echo '    -l <location>, --location  Country Code to prefer mirrors from'
-  echo '    --clean-partials           Deletes unfinished downloads (.part files) whose release left the catalog or'
-  echo '                               whose finished ZIM already exists.'
+  echo '    --clean-partials           Deletes unfinished downloads (.part files) whose release left the catalog, or'
+  echo '                               whose finished ZIM -f has just verified as good.'
   echo '    -d, --disable-dry-run      Dry-Run Override.'
   echo '                               *** Caution ***'
 
@@ -554,7 +554,8 @@ zim_is_newer() {
 
 # cleanup_partials - Report (and with --clean-partials remove) unfinished downloads in the ZIM directory.
 # Nothing that could still be useful is deleted: a .part file is removed only with --clean-partials, and only when its
-# release is no longer in the catalog or its finished ZIM already exists. Files behind a `.~lock.` marker (left by older
+# release is no longer in the catalog, or when -f verified its finished ZIM as good in this run (a .part next to an
+# existing ZIM is otherwise the replacement for a corrupt one, which the next -f run resumes). Files behind a `.~lock.` marker (left by older
 # versions of this script, which downloaded straight into the ZIM's name) are never deleted; only a marker whose file
 # is gone is removed. In dry-run nothing is changed, the would-be actions are listed.
 cleanup_partials() {
@@ -575,8 +576,8 @@ cleanup_partials() {
     if [[ " ${ResumableParts[*]} " == *" $part "* ]]; then
       echo -e "  ${YELLOW_BOLD}Keeping interrupted download for the next run to resume: $part${CLEAR}"
       echo "Keeping interrupted download for the next run to resume: $part" >> "$LOG_FILE"
-    elif [[ -f "$ZIMPath$partName" ]] || [[ " ${RemoteFiles[*]} " != *" $partName "* ]]; then
-      # Useless: the finished ZIM is already there, or the release left the catalog so it can never be resumed
+    elif [[ " ${RemoteFiles[*]} " != *" $partName "* ]] || [[ " ${VerifiedZIMs[*]} " == *" $partName "* ]]; then
+      # Useless: the release left the catalog so it can never be resumed, or its finished ZIM was just verified good
       if [[ $CLEAN_PARTIALS -eq 1 ]]; then
         echo -e "  ${BLUE_BOLD}${simulated}Removing unfinished download that can no longer be used: $part${CLEAR}"
         echo "${simulated}Removing unfinished download that can no longer be used: $part" >> "$LOG_FILE"
@@ -832,6 +833,8 @@ main() {
   AnyVerifyFailed=0
   # .part files of downloads that failed in this run but can be resumed: the cleanup reports them as such
   ResumableParts=()
+  # ZIMs that -f verified as good in this run: a .part next to one of them is a replacement that is no longer needed
+  VerifiedZIMs=()
 
   for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
     RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
@@ -1123,6 +1126,7 @@ main() {
           else
             echo -e "${GREEN_BOLD}    ✓ Status : Checksum passed${CLEAR}"
             echo "✓ Status : Checksum passed" >>"$LOG_FILE"
+            VerifiedZIMs+=("$OldZIM")
 
             [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>"$LOG_FILE"
             [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>"$LOG_FILE"

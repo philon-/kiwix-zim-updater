@@ -173,14 +173,42 @@ keep_copy() {
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
 }
 
-@test "clean-partials: removes a .part whose finished ZIM already exists, even with nothing to download" {
+@test "clean-partials: removes a .part whose finished ZIM -f just verified as good" {
   make_local_zim "$W" --from-remote "$WREMOTE"
   printf 'partial' >"$ZIMS/$W.part"
+  run_updater -f -d --clean-partials "$ZIMS"
+  assert_success
+  assert_output --partial 'Checksum passed'
+  [[ ! -e "$ZIMS/$W.part" ]]
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+}
+
+@test "clean-partials: works on a run with nothing to download" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  printf 'partial' >"$ZIMS/wikipedia_en_test_2025-06.zim.part"
   run_updater -d --clean-partials "$ZIMS"
   assert_success
   assert_output --partial 'Nothing to download'
-  [[ ! -e "$ZIMS/$W.part" ]]
+  [[ ! -e "$ZIMS/wikipedia_en_test_2025-06.zim.part" ]]
+}
+
+@test "clean-partials: keeps the resumable replacement of a corrupt ZIM between runs" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  printf 'X' | dd of="$ZIMS/$W" bs=1 seek=10 conv=notrunc status=none
+  # A -f run starts the replacement and is interrupted
+  FAKE_WGET_FAIL="$W" run_updater -f -d "$ZIMS"
+  assert_failure 1
+  [[ -s "$ZIMS/$W.part" ]]
+  cp "$ZIMS/$W.part" "$SANDBOX/part.orig"
+  # The nightly run with --clean-partials must leave it for the next -f run
+  run_updater -d --clean-partials "$ZIMS"
+  assert_success
+  assert_output --partial "Keeping unfinished download for a later run to resume: $ZIMS/$W.part"
+  cmp "$ZIMS/$W.part" "$SANDBOX/part.orig"
+  run_updater -f -d "$ZIMS"
+  assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ ! -e "$ZIMS/$W.part" ]]
 }
 
 @test "clean-partials: keeps a .part that a later run can still resume (outside -x)" {
