@@ -52,7 +52,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_output ''
   run wget_downloads
   # Downloads are staged in a .part file and renamed once verified
-  assert_output "-q --show-progress --progress=bar:force -c -O $ZIMS/$NEW_WP.part https://mirror.kiwix.test/zim/wikipedia/wikipedia_en_test_2026-01.zim"
+  assert_output "--connect-timeout=30 --read-timeout=300 --tries=3 -q --show-progress --progress=bar:force -c -O $ZIMS/$NEW_WP.part https://mirror.kiwix.test/zim/wikipedia/wikipedia_en_test_2026-01.zim"
 }
 
 @test "download: -d updates several ZIMs in one run" {
@@ -154,7 +154,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   [[ ! -e "$ZIMS/$NEW_WP" ]]
   [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
   run wget_downloads
-  assert_output "-q --show-progress --progress=bar:force -c -O $ZIMS/$NEW_WP.torrent https://download.kiwix.test/$WP_REMOTE.torrent"
+  assert_output "--connect-timeout=30 --read-timeout=300 --tries=3 -q --show-progress --progress=bar:force -c -O $ZIMS/$NEW_WP.torrent https://download.kiwix.test/$WP_REMOTE.torrent"
 }
 
 @test "download: a second -t run sees the torrent and downloads nothing" {

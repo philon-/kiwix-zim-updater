@@ -58,6 +58,9 @@ ExpectedHash=""
 # ZIM itself instead of the metadata, and on a download it may follow the server's metalink headers instead of simply
 # writing the -O file. wget 1.x rejects --no-metalink, so this is filled in by detect_wget_flavor.
 WGET_META_OPTS=()
+# Network limits for every request, so a stalled connection cannot hang an unattended run for hours (wget's defaults
+# are 20 tries with a 15 minute read timeout). An interrupted download is simply resumed from its .part file next run.
+WGET_NET_OPTS=(--connect-timeout=30 --read-timeout=300 --tries=3)
 # sort of a default, will be overwritten when the library is parsed. Set here to what it probably will be
 BaseURL="https://lb.download.kiwix.org/zim/"
 CatalogURL="https://opds.library.kiwix.org/catalog/v2/entries?count=-1"
@@ -106,7 +109,7 @@ master_scrape() {
     # Fetch the catalog, then cache its timestamp (first line) and all of its links in the index file.
     # The index is only replaced once the fetch succeeded and parsed, so a failure never caches an empty index.
     local rawCatalog fetchStatus catalogDate indexTmp
-    rawCatalog="$(wget --show-progress -q -O - "$CatalogURL")"
+    rawCatalog="$(wget "${WGET_NET_OPTS[@]}" --show-progress -q -O - "$CatalogURL")"
     fetchStatus=$?
     if [[ $fetchStatus -ne 0 ]]; then
       echo -e "${RED_REGULAR}    ✗ Could not fetch the online catalog (wget exit $fetchStatus). Exiting...${CLEAR}"
@@ -651,7 +654,7 @@ write_checksum_file() {
 # download_file - Download (or resume) $2 into $1, showing progress and logging it. Returns wget's own exit status,
 # not tee's.
 download_file() {
-  wget "${WGET_META_OPTS[@]}" -q --show-progress --progress=bar:force -c -O "$1" "$2" 2>&1 | tee -a "$LOG_FILE"
+  wget "${WGET_NET_OPTS[@]}" "${WGET_META_OPTS[@]}" -q --show-progress --progress=bar:force -c -O "$1" "$2" 2>&1 | tee -a "$LOG_FILE"
   return "${PIPESTATUS[0]}"
 }
 
@@ -664,7 +667,7 @@ mirror_search() {
 
   # If we need the checksum, we need a link  and the hash, which we can get both by using .meta4, otherwise we only need
   # Silently fetch (via wget) the associated meta4 xml and extract the mirror URL marked priority="1"
-  MetaInfo=$(wget "${WGET_META_OPTS[@]}" -q -O - "$BaseURL$RemotePath.meta4?country=$COUNTRY_CODE")
+  MetaInfo=$(wget "${WGET_NET_OPTS[@]}" "${WGET_META_OPTS[@]}" -q -O - "$BaseURL$RemotePath.meta4?country=$COUNTRY_CODE")
   ExpectedSize=$(echo "$MetaInfo" | grep '<size>' | grep -Po '\d+')
   ExpectedHash=$(echo "$MetaInfo" | grep '<hash type="sha-256">' | grep -Poi '(?<="sha-256">)[a-f\d]{64}(?=<)')
 
@@ -911,7 +914,7 @@ main() {
           echo -e "${GREEN_REGULAR}    Cached Checksum Found${CLEAR}"
         else
           echo "    Checking for online checksum..."
-          if wget -S --spider -q -O - "$BaseURL$MatchingCategory/$FileName.sha256" >/dev/null 2>&1; then
+          if wget "${WGET_NET_OPTS[@]}" -S --spider -q -O - "$BaseURL$MatchingCategory/$FileName.sha256" >/dev/null 2>&1; then
             LocalRequiresDownloadArray+=(4)
             AnyDownloads=1
             echo -e "${GREEN_BOLD}    ✓ Online Version Found${CLEAR}"
@@ -974,7 +977,7 @@ main() {
         NewZIMPath="$OldZIMPath"
       elif [[ ${LocalRequiresDownloadArray[$z]} -eq 4 ]]; then
         # Outdated ZIM: verify it against its own published checksum, not against the newer release's meta4
-        ExpectedHash=$(wget -q -O - "$BaseURL${RemoteCategory[${LocalZIMRemoteIndexArray[$z]}]}/$OldZIM.sha256" 2>/dev/null | grep -ioP "^[0-9a-f]{64}")
+        ExpectedHash=$(wget "${WGET_NET_OPTS[@]}" -q -O - "$BaseURL${RemoteCategory[${LocalZIMRemoteIndexArray[$z]}]}/$OldZIM.sha256" 2>/dev/null | grep -ioP "^[0-9a-f]{64}")
 
         NewZIM="$OldZIM"
         NewZIMPath="$OldZIMPath"

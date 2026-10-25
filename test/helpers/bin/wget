@@ -8,6 +8,7 @@
 # so the download host and the mirror host serve the same tree.
 #
 # Supported options: -q, -c, -S, --show-progress, --progress=..., --spider,
+# --connect-timeout=..., --read-timeout=..., --tries=...,
 # -O -, -O <file>, --version. Anything else exits 2 like a wget parse error,
 # so new wget usage in the script has to be taught to this stub explicitly.
 #
@@ -63,7 +64,7 @@ while [[ $# -gt 0 ]]; do
       resume=1
       shift
       ;;
-    -q | --quiet | -S | --server-response | --show-progress | --progress=*)
+    -q | --quiet | -S | --server-response | --show-progress | --progress=* | --connect-timeout=* | --read-timeout=* | --tries=*)
       shift
       ;;
     --no-metalink)
