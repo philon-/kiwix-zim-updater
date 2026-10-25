@@ -93,6 +93,11 @@ YEAR_REGEX="\d{4}"
 END_ANCHOR_REGEX="\.zim"
 
 COMPLETE_ENDING_REGEX="$YEAR_REGEX-$MONTH_REGEX$END_ANCHOR_REGEX"
+# Applied to a catalog link relative to the base URL, e.g. wikipedia/wikipedia_en_all_maxi_2026-01.zim
+REMOTE_FILE_REGEX="[^/]/\K[\w:\/\-.]+"                         # wikipedia_en_all_maxi_2026-01.zim
+BASE_REGEX="[^/]/\K[\w:\/\-.]+(?=$COMPLETE_ENDING_REGEX)"       # wikipedia_en_all_maxi_
+REMOTE_PATH_REGEX="^[\w:\/\-.]+"                                # the whole link
+REMOTE_CATEGORY_REGEX="^[^/]+"                                   # wikipedia
 
 # say <colour> <message> - Print the message in colour, and log it without the colour and the leading indent
 say() {
@@ -151,11 +156,6 @@ master_scrape() {
     RawLibrary=$(grep -i '<link rel' < "$INDEX_FILE")
   fi
 
-  REMOTE_FILE_REGEX="[^/]/\K[\w:\/\-.]+"
-  BASE_REGEX="[^/]/\K[\w:\/\-.]+(?=$COMPLETE_ENDING_REGEX)"
-  REMOTE_PATH_REGEX="^[\w:\/\-.]+"
-  REMOTE_CATEGORY_REGEX="^[^/]+"
-
   ValidLibrary="$RawLibrary"
   # ensure that every line matches every regex
   ValidLibrary="$(echo "$ValidLibrary" | grep -iP '(?<=length=")\d+(?=")')"
@@ -164,8 +164,7 @@ master_scrape() {
   ValidLibrary="$(echo "$ValidLibrary" | grep -iP "href=\"https?://[^/]+$REMOTE_FILE_REGEX")"
   ValidLibrary="$(echo "$ValidLibrary" | grep -iP "href=\"https?://[^/]+$BASE_REGEX")"
 
-  IFS=$'\n' read -r -d '' -a FileSizes < <(echo "$ValidLibrary" | grep -ioP '(?<=length=")\d+(?=")')
-  unset IFS
+  mapfile -t FileSizes < <(echo "$ValidLibrary" | grep -ioP '(?<=length=")\d+(?=")')
 
   RawLinks=$(echo "$ValidLibrary" | grep -ioP "(?<=href=\")[\w:\/\-.]+(?=\.meta4\")")
 
@@ -186,14 +185,10 @@ master_scrape() {
 
   hrefs=$(echo "$ValidLibrary" | grep -ioP "(?<=href=\")[\w:\/\-.]+(?=\.meta4\")" | grep -ioP "$BaseURL\K.*")
 
-  IFS=$'\n' read -r -d '' -a RemoteFiles < <(echo "$hrefs" | grep -ioP "$REMOTE_FILE_REGEX")
-  unset IFS
-  IFS=$'\n' read -r -d '' -a Basenames < <(echo "$hrefs" | grep -ioP "$BASE_REGEX")
-  unset IFS
-  IFS=$'\n' read -r -d '' -a RemotePaths < <(echo "$hrefs" | grep -ioP "$REMOTE_PATH_REGEX")
-  unset IFS # distinct from above for processing speed reasons
-  IFS=$'\n' read -r -d '' -a RemoteCategory < <(echo "$hrefs" | grep -ioP "$REMOTE_CATEGORY_REGEX")
-  unset IFS
+  mapfile -t RemoteFiles < <(echo "$hrefs" | grep -ioP "$REMOTE_FILE_REGEX")
+  mapfile -t Basenames < <(echo "$hrefs" | grep -ioP "$BASE_REGEX")
+  mapfile -t RemotePaths < <(echo "$hrefs" | grep -ioP "$REMOTE_PATH_REGEX")
+  mapfile -t RemoteCategory < <(echo "$hrefs" | grep -ioP "$REMOTE_CATEGORY_REGEX")
 
   if [[ ${#RemoteFiles[@]} -eq 0 ]]; then
     say "${RED_REGULAR}" "    ✗  Could not find any remote files, exiting"
