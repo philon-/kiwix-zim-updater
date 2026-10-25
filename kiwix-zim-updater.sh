@@ -13,8 +13,13 @@ LocalZIMArray=()
 LocalZIMNameArray=()
 # This array will map the local zim to the index in the remote arrays that contains the same base file name
 LocalZIMRemoteIndexArray=()
-# This array is a boolean array which remembers if a given local zim should be processed in the download loop
-LocalRequiresDownloadArray=()
+# What the download loop does with each local zim, one of the ACT_* values below
+LocalActionArray=()
+ACT_NONE=0            # nothing: up to date, outside the size limits, or not in the catalog
+ACT_UPDATE=1          # download the catalog version; with -f, verify the current one and replace it when corrupt
+ACT_VERIFY_CACHED=2   # -f: an outdated zim, verified against its cached .sha256
+ACT_VERIFY_UNLISTED=3 # -f: a zim that is not in the catalog, verified against its cached .sha256
+ACT_VERIFY_ONLINE=4   # -f: an outdated zim, verified against its own published .sha256
 
 # This array stores the file names that kiwix has to offer, with .zim extensions
 RemoteFiles=()
@@ -936,12 +941,12 @@ main() {
     FileName=${LocalZIMNameArray[$i]}
     if [[ $RemoteIndex -eq -1 ]]; then
       if [[ $VERIFY_LIBRARY -eq 1 ]] && [[ -f "$ZIMPath$FileName.sha256" ]]; then
-        LocalRequiresDownloadArray+=(3)
+        LocalActionArray+=("$ACT_VERIFY_UNLISTED")
         AnyDownloads=1
         echo -e "${BLUE_BOLD}  - $FileName:${CLEAR}"
         echo -e "${GREEN_REGULAR}    Cached Checksum Found${CLEAR}"
       else
-        LocalRequiresDownloadArray+=(0)
+        LocalActionArray+=("$ACT_NONE")
         # Not a ZIM from the catalog (e.g. self-made or renamed) and nothing cached to check it against: outside what
         # -f covers, so say so instead of skipping it silently. This does not change the exit code.
         if [[ $VERIFY_LIBRARY -eq 1 ]]; then
@@ -958,7 +963,7 @@ main() {
     MatchingFileName=${RemoteFiles[$RemoteIndex]}
     MatchingCategory=${RemoteCategory[$RemoteIndex]}
 
-    [[ -f "$ZIMPath$MatchingFileName.torrent" ]] && [[ ! -f "$ZIMPath$MatchingFileName" ]] && echo -e "${YELLOW_REGULAR}    Torrent already downloaded\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalRequiresDownloadArray+=(0) && continue
+    [[ -f "$ZIMPath$MatchingFileName.torrent" ]] && [[ ! -f "$ZIMPath$MatchingFileName" ]] && echo -e "${YELLOW_REGULAR}    Torrent already downloaded\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n" && LocalActionArray+=("$ACT_NONE") && continue
 
     MatchedDate="$(zim_date "$MatchingFileName")"
     LocalDate="$(zim_date "$FileName")"
@@ -975,12 +980,12 @@ main() {
     # finishing it too: outside them it is left alone (and kept) for a run that allows its size.
     if [[ -f "$ZIMPath.~lock.$FileName" ]] && { [[ $VERIFY_LIBRARY -eq 0 ]] || [[ "$MatchingFileName" == "$FileName" ]]; }; then
       if [[ $FileSizeAcceptable -eq 0 ]]; then
-        LocalRequiresDownloadArray+=(0)
+        LocalActionArray+=("$ACT_NONE")
         echo -e "${YELLOW_REGULAR}    Incomplete download detected, but $(numfmt --to=iec-i "$MatchingSize") is outside the -n/-x size limits. Left as it is.${CLEAR}\n"
         echo "Incomplete download of $FileName left as it is: outside the -n/-x size limits" >>"$LOG_FILE"
       else
         echo -e "${YELLOW_REGULAR}    Incomplete download detected\n${GREEN_BOLD}    ✓ Online Version Found${CLEAR}\n"
-        LocalRequiresDownloadArray+=(1)
+        LocalActionArray+=("$ACT_UPDATE")
         AnyDownloads=1
       fi
       continue
@@ -988,37 +993,37 @@ main() {
 
     if [ $VERIFY_LIBRARY -eq 1 ] && [ $FileSizeAcceptable -eq 0 ]; then
       if [ $FileTooSmall -eq 1 ]; then
-        LocalRequiresDownloadArray+=(0)
+        LocalActionArray+=("$ACT_NONE")
         [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Verification skipped due to file size (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
         [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Verification skipped due to file size (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
       elif [ $FileTooLarge -eq 1 ]; then
-        LocalRequiresDownloadArray+=(0)
+        LocalActionArray+=("$ACT_NONE")
         [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Verification skipped due to file size (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
         [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Verification skipped due to file size (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
       fi
     elif [[ "$MatchingFileName" == "$FileName" ]]; then
       if [ $VERIFY_LIBRARY -eq 1 ]; then
-        LocalRequiresDownloadArray+=(1)
+        LocalActionArray+=("$ACT_UPDATE")
         AnyDownloads=1
         echo -e "${GREEN_BOLD}    ✓ Online Version Found${CLEAR}"
       else
-        LocalRequiresDownloadArray+=(0)
+        LocalActionArray+=("$ACT_NONE")
         echo "    ✗ No new update"
       fi
     else
       if [ $VERIFY_LIBRARY -eq 1 ]; then
         if [[ -f "$ZIMPath$FileName.sha256" ]]; then
-          LocalRequiresDownloadArray+=(2)
+          LocalActionArray+=("$ACT_VERIFY_CACHED")
           AnyDownloads=1
           echo -e "${GREEN_REGULAR}    Cached Checksum Found${CLEAR}"
         else
           echo "    Checking for online checksum..."
           if wget "${WGET_NET_OPTS[@]}" -S --spider -q -O - "$BaseURL$MatchingCategory/$FileName.sha256" >/dev/null 2>&1; then
-            LocalRequiresDownloadArray+=(4)
+            LocalActionArray+=("$ACT_VERIFY_ONLINE")
             AnyDownloads=1
             echo -e "${GREEN_BOLD}    ✓ Online Version Found${CLEAR}"
           else
-            LocalRequiresDownloadArray+=(0)
+            LocalActionArray+=("$ACT_NONE")
             # Nothing to verify it against: the file is kept, but the verification failed (exit 1)
             echo "    ✗ Online Version Not Found"
             echo -e "${YELLOW_BOLD}    No checksum for $FileName anywhere, it cannot be verified. Kept; a normal update run replaces it with the newer version.${CLEAR}"
@@ -1028,18 +1033,18 @@ main() {
         fi
       else
         if [ $FileTooSmall -eq 1 ]; then
-          LocalRequiresDownloadArray+=(0)
+          LocalActionArray+=("$ACT_NONE")
           [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
           [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
         elif [ $FileTooLarge -eq 1 ]; then
-          LocalRequiresDownloadArray+=(0)
+          LocalActionArray+=("$ACT_NONE")
           [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
           [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
         elif ! zim_is_newer "$MatchedDate" "$LocalDate"; then
-          LocalRequiresDownloadArray+=(0)
+          LocalActionArray+=("$ACT_NONE")
           echo "    ✗ No new update"
         else
-          LocalRequiresDownloadArray+=(1)
+          LocalActionArray+=("$ACT_UPDATE")
           AnyDownloads=1
           echo -e "${GREEN_BOLD}    ✓ Update found! --> $MatchedDate${CLEAR}"
         fi
@@ -1056,7 +1061,8 @@ main() {
   # Let's Start the download process, but only if we have actual downloads to do.
   if [ $AnyDownloads -eq 1 ]; then
     for ((z = 0; z < ${#LocalZIMNameArray[@]}; z++)); do # Iterate through the download queue.
-      [[ ${LocalRequiresDownloadArray[$z]} -eq 0 ]] && continue
+      Action=${LocalActionArray[$z]}
+      [[ $Action -eq $ACT_NONE ]] && continue
 
       # Per-file state: nothing may carry over from the previous ZIM (or leak in from the environment)
       DownloadFailed=0
@@ -1071,13 +1077,13 @@ main() {
 
       echo -e "${BLUE_BOLD}  Processing $OldZIM${CLEAR}"
 
-      if [[ ${LocalRequiresDownloadArray[$z]} -eq 2 ]] || [[ ${LocalRequiresDownloadArray[$z]} -eq 3 ]]; then
+      if [[ $Action -eq $ACT_VERIFY_CACHED ]] || [[ $Action -eq $ACT_VERIFY_UNLISTED ]]; then
         # Verified against its own cached checksum only: no metadata, no download
         ExpectedHash=$(grep -ioP "^[0-9a-f]{64}" <"$OldZIMPath.sha256")
 
         NewZIM="$OldZIM"
         NewZIMPath="$OldZIMPath"
-      elif [[ ${LocalRequiresDownloadArray[$z]} -eq 4 ]]; then
+      elif [[ $Action -eq $ACT_VERIFY_ONLINE ]]; then
         # Outdated ZIM: verify it against its own published checksum, not against the newer release's meta4
         ExpectedHash=$(wget "${WGET_NET_OPTS[@]}" -q -O - "$BaseURL${RemoteCategory[${LocalZIMRemoteIndexArray[$z]}]}/$OldZIM.sha256" 2>/dev/null | grep -ioP "^[0-9a-f]{64}")
 
@@ -1141,21 +1147,21 @@ main() {
         fi
       else
         # lockfile implies an incomplete download (only the current catalog version, state 1, is ever downloaded)
-        if [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] && [[ -f $LockFilePath ]]; then
+        if [[ $Action -eq $ACT_UPDATE ]] && [[ -f $LockFilePath ]]; then
           echo "Incomplete download detected, resuming" >>"$LOG_FILE"
           echo -e "${YELLOW_REGULAR}    Status: Incomplete download detected, resuming${CLEAR}"
 
           RequiresDownload=1
-        elif [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] && [[ -f $TorrentFilePath ]]; then
+        elif [[ $Action -eq $ACT_UPDATE ]] && [[ -f $TorrentFilePath ]]; then
           echo -e "${YELLOW_REGULAR}    Status: Torrent exists, skipping${CLEAR}"
           echo "Skipping checksum for torrent : $OldZIM. If the download has been completed, please delete the .torrent if you want me to verify the checksum." >>"$LOG_FILE"
         else
           # actually verify the file
           echo -e "${BLUE_REGULAR}    Calculating checksum for : $OldZIM${CLEAR}"
           echo "Calculating checksum for : $OldZIM" >>"$LOG_FILE"
-          { [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] || [[ ${LocalRequiresDownloadArray[$z]} -eq 4 ]]; } && write_checksum_file "$OldZIM" "$ExpectedHash"
+          { [[ $Action -eq $ACT_UPDATE ]] || [[ $Action -eq $ACT_VERIFY_ONLINE ]]; } && write_checksum_file "$OldZIM" "$ExpectedHash"
           # An unknown expected size (failed meta4 fetch) is "cannot verify", never "corrupt"
-          if [[ ${LocalRequiresDownloadArray[$z]} -eq 1 ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
+          if [[ $Action -eq $ACT_UPDATE ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
             RequiresDownload=1
             if [[ $DEBUG -eq 0 ]]; then
               if [[ $SKIP_PURGE -eq 0 ]]; then
@@ -1185,13 +1191,13 @@ main() {
             AnyVerifyFailed=1
           elif ! hash_matches "$OldZIM" "$ExpectedHash"; then
             # we checked a very old file, but we will choose to not replace it because we cannot, so we will leave it. A regular update will purge it naturally
-            if [[ ${LocalRequiresDownloadArray[$z]} -eq 3 ]]; then
+            if [[ $Action -eq $ACT_VERIFY_UNLISTED ]]; then
               echo -e "${RED_BOLD}    ✗ Checksum failed, but no online version to replace it with. File kept.${CLEAR}"
               echo "✗ Checksum failed for $OldZIM, no online version to replace it with. File kept." >>"$LOG_FILE"
               AnyVerifyFailed=1
               echo
               continue
-            elif [[ ${LocalRequiresDownloadArray[$z]} -ne 1 ]]; then
+            elif [[ $Action -ne $ACT_UPDATE ]]; then
               echo -e "${RED_BOLD}    ✗ Checksum failed. File kept; a normal update run (without -f) will replace it with the newer version.${CLEAR}"
               echo "✗ Checksum failed for $OldZIM. File kept; a normal update run will replace it with the newer version." >>"$LOG_FILE"
               AnyVerifyFailed=1
@@ -1239,7 +1245,7 @@ main() {
             continue
           fi
           # Verified against its own checksum only (states 2, 3 and 4): there is nothing to download
-          [[ ${LocalRequiresDownloadArray[$z]} -ne 1 ]] && continue
+          [[ $Action -ne $ACT_UPDATE ]] && continue
         fi
       fi
       echo >>"$LOG_FILE"
