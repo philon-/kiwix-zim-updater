@@ -358,8 +358,9 @@ set_size() {
   printf -v "$1" '%s' "$bytes"
 }
 
-# flags - Flag and ZIM Processing Functions
-flags() {
+# validate_zim_dir <dir> - Set ZIMPath (with a trailing slash), or exit 2 when <dir> is not a directory. An unwritable
+# directory forces dry-run.
+validate_zim_dir() {
   say "${YELLOW_BOLD}" "2. Preprocessing..."
   echo
   echo -e "${BLUE_BOLD}  -Validating ZIM directory...${CLEAR}"
@@ -389,8 +390,11 @@ flags() {
 
   # Check for and add if missing, trailing slash.
   [[ "${ZIMPath}" != */ ]] && ZIMPath="${ZIMPath}/"
+}
 
-  # Now we need to check for ZIM files.
+# list_local_zims - Fill LocalZIMArray with the ZIMs in ZIMPath, leaving out older versions shadowed by a newer one
+# (and the other way round for interrupted downloads), or exit 1 when there are none
+list_local_zims() {
   shopt -s nullglob # This is in case there are no matching files
 
   # Load all found ZIM(s) into LocalZIMArray: names without the path, regular files only, hidden files skipped like
@@ -461,16 +465,10 @@ flags() {
     echo -e "${GREEN_BOLD}  ✓ Valid ZIM Directory ${CLEAR}"
   fi
   echo
+}
 
-  acquire_zim_dir_lock
-  echo -e "${BLUE_BOLD}  -Building online ZIM list...${CLEAR}"
-
-  # Build online ZIM list.
-  master_scrape
-
-  echo
-
-  # Populate ZIM arrays from found ZIM(s)
+# match_to_catalog - Fill LocalZIMRemoteIndexArray with the catalog index of each local ZIM's title (-1 if not listed)
+match_to_catalog() {
   echo -e "${BLUE_BOLD}  -Parsing ZIM(s)...${CLEAR}"
 
   # The catalog index of each title (catalog titles end in "_"); the first entry wins
@@ -904,11 +902,16 @@ main() {
   check_dependencies
   detect_wget_flavor
 
-  # First, Self-Update Check.
+  # Self-update first: after an update the new version runs again with the same arguments
   self_update
 
-  # Second, Flag Check.
-  flags "$@"
+  validate_zim_dir "$1"
+  list_local_zims
+  acquire_zim_dir_lock
+  echo -e "${BLUE_BOLD}  -Building online ZIM list...${CLEAR}"
+  master_scrape
+  echo
+  match_to_catalog
   [[ $DEBUG -eq 1 ]] && SIMULATED="*** Simulated *** "
 
   # Pick up ZIMs added or removed by hand since the last run (writes only when something changed)
