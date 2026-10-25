@@ -26,3 +26,14 @@ jobs:
 
       - name: Test
         run: make test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show tool versions
+        run: docker version
+
+      - name: Build the image and smoke-test it offline
+        run: make docker-test CONTAINER_ENGINE=docker
