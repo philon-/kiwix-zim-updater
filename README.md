@@ -1,110 +1,130 @@
-# kiwix-zim-updater.sh
+# kiwix-zim-updater
 
-A script to check `download.kiwix.org` for updates to your local ZIM library.
+Keeps a local library of Kiwix ZIM files up to date. It compares every ZIM in a directory with the online Kiwix catalog by the date in its file name, downloads newer versions, and removes the old ones once the new ones are verified. It is built to run unattended (cron or Docker): a failed run never costs you a ZIM, so your library stays usable offline.
 
-Just pass this script your ZIM directory and away it goes. *(see Usage below)*
+This is a fork of [jojo2357/kiwix-zim-updater](https://github.com/jojo2357/kiwix-zim-updater); see [Changes in this fork](#changes-in-this-fork).
 
-Tested on Debian 13, and should work out of the box on most debian systems, but I have not tested that.
+## Quick start
 
-## What It Does
-
-I wanted an easy way to ensure my ZIM library was kept updated without actually needing to check every ZIM individually. I looked for a tool to do this, but didn't find anything... so I put on my amateur BASH hat and made one.
-
-Some people run this script via a scheduled cron job where they store their ZIM library and host a Kiwix server. <!-- After it's complete, I follow it up with an automated call to update my `library.xml` for the Kiwix server (Note: this part is not provided via this script). This keeps my ZIM library and Kiwix server updated.-->
-
-It works for me. Your mileage may vary...no warranty, see [the license](./LICENSE) for more info
-
-This script will parse a list of all ZIM(s) found in the ZIM directory passed to it. It then checks each ZIM against what is on the `download.kiwix.org` website via the file name Year-Month part.
-
-Any zims with newer versions online will then be replaced by default. There is an option to verify the downloaded checksums automatically, and options to set the maximum and minimum zim size to download. Although default behavior is to purge the old zim if the new zim passes inspection, purging can be disabled if you would like to keep an archive of old zims.
-
-```text
-Note: Due to the nature of ZIM sizes and internet connection speeds, 
-      you should expect the download process to take a while.
-
-      This script will output the download progress bar during the 
-      download process just so you can see that the script hasn't 
-      frozen or locked up.
-
-      Download status is also logged in real-time for monitoring from
-      outside this script.
+```shell
+git clone https://github.com/philon-/kiwix-zim-updater.git
+cd /var/lib/kiwix          # download.log and the catalog cache are written here
+/path/to/kiwix-zim-updater/kiwix-zim-updater.sh /srv/kiwix/zims/          # dry-run: shows what it would do
+/path/to/kiwix-zim-updater/kiwix-zim-updater.sh -d -c /srv/kiwix/zims/    # really update, with checksums
 ```
 
-### Special Note 1
+The script runs as a **dry-run unless you pass `-d`**: it then changes nothing in the ZIM directory. Only ZIMs that keep their original `download.kiwix.org` file names (`<name>_<YYYY-MM>.zim`) are recognised.
 
-For data safety reasons, I have coded this script to "dry-run" by default. This means that this script will not download or purge anything, however, it will "go through the motions" and output what it would have actually done, allowing you to review the "effects" before commiting to them.
+## What keeps your library safe
 
-Once you are good with the "dry-run" results and wish to commit to them, simply re-run the script like you did the first time, but this time, add the "dry-run" override flag (`-d`) to the end.
+- **Nothing unverified replaces a ZIM.** A new version is downloaded as `<name>.zim.part` and only renamed to `.zim` once its size matches the published metadata (and its sha256, with `-c`). Only then is the old version removed (`-p` keeps it).
+- **Failures leave everything as it was.** A failed or interrupted download stays a `.part` file and is resumed by the next run. During an internet outage a run exits 1 without touching the ZIM directory.
+- **The disk does not fill up.** A download is skipped when it would leave less than `--min-free` (default 1 GiB) free. Requests time out instead of hanging.
+- **One run per ZIM directory** at a time (`flock`); a second one exits 75.
+- **`-f` checks the library** against the published checksums and replaces a corrupt current ZIM only once its replacement is verified. It never deletes a ZIM it cannot replace. A ZIM it cannot verify makes the run exit 1; one that is not in the catalog and has no cached `.sha256` is reported as not checked.
+- **Leftovers are reported, not deleted.** `.part` files that can no longer be used are listed at the end of a run; `--clean-partials` removes them.
 
-```text
-Bonus: A dry-run/simulation run is not required. If you like to 
-       live dangerously, feel free to just call the script with 
-       the override flag right from the start. 
+## Running from cron
 
-       It's your ZIM libary... not mine.
+```crontab
+MAILTO=you@example.org
+0 3 * * * cd /var/lib/kiwix && /opt/kiwix-zim-updater/kiwix-zim-updater.sh -d -c /srv/kiwix/zims/ >/dev/null 2>&1 || echo "kiwix-zim-updater exited with $?, see /var/lib/kiwix/download.log"
 ```
 
-### Special Note 2
+`download.log` (watch it with `tail -f`) and `kiwix-index` (the catalog, cached for a day) are written to the directory the script is run from.
 
-Creates `downloads.log` for the following reasons:
+## Exit codes
 
-1. History of what was done. Just good to have.
-2. Because downloads can take a really long time, if you were to run this script in the background, you'd have no real way of monitoring the status of any downloads it may be running... `download.log` can be monitored for real-time status of any downloads taking place. You could use a very simple `tail -f download.log` to watch those download stats in real-time from outside of the script.
+| Code | Meaning |
+|---|---|
+| 0 | Success, including "nothing to update". |
+| 1 | Runtime error: network or parse failure, missing dependency, no ZIMs found, a failed download (including a size or checksum mismatch), with `-f` a ZIM that could not be verified or was found corrupt and kept, `-d` on a ZIM directory that is not writable, or a library file that could not be written. |
+| 2 | Usage error: bad option or value, missing or invalid ZIM directory, or `-c`/`-f` with `-t`. |
+| 75 | Another instance is already running on the same ZIM directory. |
 
-## Limitations
+## Keeping kiwix-serve up to date
 
-- This script relies heavily on `grep`'s `-P` flag for lookarounds and the matcher reset, `\K`. This may cause compatibility problems on macOS
-- This script is only for ZIM(s) hosted by `download.kiwix.org` due to the file naming standard they use. If you have self-made ZIM(s) or ZIM(s) downloaded from somewhere else, they most likely do not use the same naming standards and will not be processed by this script.
-- If you have ZIM(s) from `download.kiwix.org`, but you have changed their file names, this script will treat them like the previous limitation explains.
-- This script does not attempt to update any `library.xml` that may or may not exist/be needed for your install/setup of Kiwix. If needed, you'll need to handle this part on your own.
+kiwix-serve started with `*.zim` keeps serving the files it opened at start-up. Let the updater maintain a library file instead, and kiwix-serve picks up every update within seconds, without a restart:
+
+```shell
+kiwix-zim-updater.sh -d -c --library /srv/kiwix/zims/library.xml /srv/kiwix/zims/
+kiwix-serve --library --monitorLibrary /srv/kiwix/zims/library.xml
+```
+
+The library lists the finished ZIMs in the directory: a new download only appears once it is verified, and before the old version is removed, while unfinished `.part` files never do. ZIMs that were already there are listed as they are, without a fresh integrity check; run `-f` to verify those. Keep the library in the ZIM directory (its paths are relative to it), and don't let other tools replace the file: kiwix-serve 3.8 stops watching a library file that was replaced by a rename. Needs `kiwix-manage` from kiwix-tools. Tested with kiwix-tools 3.7.0 (Debian 13) and the official `ghcr.io/kiwix/kiwix-serve` image (3.8.2).
+
+## Running with Docker
+
+```shell
+cp compose.example.yaml compose.yaml        # set your ZIM directory; every variable is documented there
+PUID=$(stat -c %u /srv/kiwix/zims) PGID=$(stat -c %g /srv/kiwix/zims) docker compose up -d --build
+docker compose logs -f kiwix-zim-updater
+```
+
+The container runs the updater immediately and then every `RUN_INTERVAL` (default `24h`). Its defaults are dry-run (`DRY_RUN=true`), checksums (`CHECKSUM=true`) and `--clean-partials`; set `DRY_RUN: "false"` once the log looks right. `/data` is the ZIM directory, `/state` holds the log, the catalog cache and the last run's status. The container is unhealthy while the last run failed, which is how an outage shows up; nothing in `/data` is touched. If it cannot record a run's status in `/state`, it stops with exit 1 rather than report a stale state. `docker stop` ends a run cleanly, and an interrupted download resumes next time. The compose example also sets `LIBRARY_XML` and contains an optional kiwix-serve service that serves the same directory.
+
+One-off runs: `docker run --rm kiwix-zim-updater -h`. Arguments are passed to the script unchanged.
 
 ## Requirements
 
-This script does not need root, however it does need the same rights as your ZIM directory or it won't be able to download and/or purge ZIMs.
+Bash 4+, GNU coreutils, `flock` (util-linux), `wget` 1.x or GNU Wget2, and `grep` with `-P`. `git` only for `-U`; `kiwix-manage` (kiwix-tools) and `cmp` only for `--library`. The script checks these at startup.
 
-Not checked or installed via script:
-
-- Git *(only needed for the self-update process to work.)*
-
-## Install
-
-This script is self-updating. The self-update routine uses git commands to make the update so this script should be "installed" with the below command.
-
-```shell
-git clone https://github.com/jojo2357/kiwix-zim-updater.git
-```
-
-UPDATE: If you decide not to install via a git clone, you can still use this script, however, it will just skip the update check and continue on.
-NOTE: if you are not tracking the `main` branch, the update check will be skipped. So if you do not want to get updates, but like git, just track the commit of your choosing.
+To update a clone: `git pull --ff-only`, or pass `-U` to let the script fast-forward itself before it runs (it refuses when the clone has local changes).
 
 ## Usage
 
 ```text
-  Usage: ./kiwix-zim-updater.sh <options> /full/path/
-  
-      /full/path/                Full path to ZIM directory
-  
-  Universal Options:
-      -h, --help                 Show this usage and exit.
-      -d, --disable-dry-run      Dry-Run Override.
-                                 *** Caution ***   
-      -u, --skip-update          Skips checking for script updates (very useful for development).
-      -g, --get-index            Forces using remote index rather than cached index. Cache auto clears after one day
-      -n <size>, --min-size      Minimum ZIM Size to be downloaded.
-                                 Specify units include M Mi G Gi, etc. See `man numfmt`
-      -x <size>, --max-size      Maximum ZIM Size to be downloaded.
-                                 Specify units include M Mi G Gi, etc. See `man numfmt`      
-                                 
-  Action Method Options:
-      -w, --web                  Downloads zims over http(s).
-      -t, --torrent              Downloads `.torrent` files. REQUIRES ADDITIONAL SOFTWARE TO EXECUTE DOWNLOAD.
-      
-  Web Download Options:
-      -c, --calculate-checksum   Verifies that the downloaded files were not corrupted, but can take a while for large downloads.
-      -p, --skip-purge           Skips purging any replaced ZIMs.
-      -l <location>, --location  Country Code to prefer mirrors from
-      -f, --verify-library       Verifies that the entire library has the correct checksums as found online.
-                                 Expected behavior is to create sha256 files during a normal run so this option can be used at a later date without internet.
-                                 Disable this using -S
-      -S, --no-sha               Disables saving the zim checksum for future reference. Does not delete present checksums.
+Usage: ./kiwix-zim-updater.sh <options> /full/path/
+
+    /full/path/                Full path to ZIM directory
+
+Universal Options:
+    -h, --help                 Show this usage and exit.
+    -U, --self-update          Updates this script from its git clone before running (off by default).
+    -u, --skip-update          Accepted for compatibility; self-update is now off unless -U is given.
+    -g, --get-index            Forces using remote index rather than cached index. Cache auto clears after one day
+    -n <size>, --min-size      Minimum ZIM Size to be downloaded.
+                               Specify units include M Mi G Gi, etc. See `man numfmt`
+    -x <size>, --max-size      Maximum ZIM Size to be downloaded.
+                               Specify units include M Mi G Gi, etc. See `man numfmt`
+    --min-free <size>          Free space to keep in the ZIM directory after a download (default 1Gi, 0 disables).
+                               A download that would leave less is skipped and the old ZIM kept.
+    --library <file>           Keeps a kiwix library XML file listing the finished ZIMs up to date, for
+                               kiwix-serve --library --monitorLibrary. Best placed in the ZIM directory.
+    -S, --no-sha               Disables saving the zim checksum for future reference. Does not delete present checksums.
+                               
+Action Method Options:
+    -w, --web                  Downloads zims over http(s).
+    -t, --torrent              Downloads `.torrent` files. REQUIRES ADDITIONAL SOFTWARE TO EXECUTE DOWNLOAD.
+    
+    -f, --verify-library       Verifies that the entire library has the correct checksums as found online.
+                               Expected behavior is to create sha256 files during a normal run so this option can be used at a later date without internet.
+                               Use -S to stop new .sha256 files from being written.
+
+Web Download Options:
+    -c, --calculate-checksum   Verifies that the downloaded files were not corrupted, but can take a while for large downloads.
+    -p, --skip-purge           Skips purging any replaced ZIMs.
+    -l <location>, --location  Country Code to prefer mirrors from
+    --clean-partials           Deletes unfinished downloads (.part files) whose release left the catalog, or
+                               whose finished ZIM -f has just verified as good.
+    -d, --disable-dry-run      Dry-Run Override.
+                               *** Caution ***
+
 ```
+
+`-v` prints the version.
+
+## Development
+
+```shell
+git submodule update --init --recursive
+make lint test          # ShellCheck and the bats test suites
+make docker-test        # build the image and smoke-test it offline
+make library-test       # --library end to end with real ZIMs and the official kiwix-serve
+```
+
+The tests never touch the network or your ZIMs: they run in a sandbox with stubs for `wget` and friends. Read [AGENTS.md](./AGENTS.md) before changing anything.
+
+## Changes in this fork
+
+Compared with upstream: verified downloads staged in `.part` files that are resumed after interruptions; a safer `-f` that never deletes what it cannot replace; meaningful exit codes; input validation; a free-space reserve and network timeouts; GNU Wget2 support; one instance per ZIM directory; a kiwix library file for kiwix-serve (`--library`); a Docker image; self-update only on request (`-U`); and a working `-S`.

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:dc="http://purl.org/dc/terms/"
+      xmlns:opds="https://specs.opds.io/opds-1.2"
+      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <id>00000000-0000-4000-8000-000000000000</id>
+
+  <link rel="self"
+        href="/catalog/v2/entries?count=-1"
+        type="application/atom+xml;profile=opds-catalog;kind=acquisition"/>
+  <link rel="start"
+        href="/catalog/v2/root.xml"
+        type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
+
+  <title>Filtered Entries (count=-1)</title>
+  <updated>__NOW__</updated>
+  <totalResults>4</totalResults>
+  <startIndex>0</startIndex>
+  <itemsPerPage>4</itemsPerPage>
+  <entry>
+    <id>urn:uuid:00000000-0000-4000-8000-000000000001</id>
+    <title>Test entry wikipedia_en_test_2026-01</title>
+    <updated>2026-01-15T00:00:00Z</updated>
+    <summary>Fixture for kiwix-zim-updater tests</summary>
+    <language>eng</language>
+    <name>wikipedia_en_test</name>
+    <flavour></flavour>
+    <category>wikipedia</category>
+    <tags>_category:wikipedia;_ftindex:no;_pictures:no;_videos:no;_details:yes</tags>
+    <articleCount>1</articleCount>
+    <mediaCount>0</mediaCount>
+    <link rel="http://opds-spec.org/image/thumbnail"
+          href="/catalog/v2/illustration/00000000-0000-4000-8000-000000000001/?size=48"
+          type="image/png;width=48;height=48;scale=1"/>
+    <link type="text/html" href="https://browse.library.kiwix.test/content/wikipedia_en_test_2026-01" />
+    <author>
+      <name>Test</name>
+    </author>
+    <publisher>
+      <name>openZIM</name>
+    </publisher>
+    <dc:issued>2026-01-15T00:00:00Z</dc:issued>
+    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/wikipedia/wikipedia_en_test_2026-01.zim.meta4" length="4096" />
+  </entry>
+  <entry>
+    <id>urn:uuid:00000000-0000-4000-8000-000000000002</id>
+    <title>Test entry wiktionary_fr_test_2026-02a</title>
+    <updated>2026-02-20T00:00:00Z</updated>
+    <summary>Fixture for kiwix-zim-updater tests</summary>
+    <language>eng</language>
+    <name>wiktionary_fr_test</name>
+    <flavour></flavour>
+    <category>wiktionary</category>
+    <tags>_category:wiktionary;_ftindex:no;_pictures:no;_videos:no;_details:yes</tags>
+    <articleCount>1</articleCount>
+    <mediaCount>0</mediaCount>
+    <link rel="http://opds-spec.org/image/thumbnail"
+          href="/catalog/v2/illustration/00000000-0000-4000-8000-000000000002/?size=48"
+          type="image/png;width=48;height=48;scale=1"/>
+    <link type="text/html" href="https://browse.library.kiwix.test/content/wiktionary_fr_test_2026-02a" />
+    <author>
+      <name>Test</name>
+    </author>
+    <publisher>
+      <name>openZIM</name>
+    </publisher>
+    <dc:issued>2026-02-20T00:00:00Z</dc:issued>
+    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/wiktionary/wiktionary_fr_test_2026-02a.zim.meta4" length="3072" />
+  </entry>
+  <entry>
+    <id>urn:uuid:00000000-0000-4000-8000-000000000003</id>
+    <title>Test entry small_test_2025-12</title>
+    <updated>2025-12-01T00:00:00Z</updated>
+    <summary>Fixture for kiwix-zim-updater tests</summary>
+    <language>eng</language>
+    <name>small_test</name>
+    <flavour></flavour>
+    <category>other</category>
+    <tags>_category:other;_ftindex:no;_pictures:no;_videos:no;_details:yes</tags>
+    <articleCount>1</articleCount>
+    <mediaCount>0</mediaCount>
+    <link rel="http://opds-spec.org/image/thumbnail"
+          href="/catalog/v2/illustration/00000000-0000-4000-8000-000000000003/?size=48"
+          type="image/png;width=48;height=48;scale=1"/>
+    <link type="text/html" href="https://browse.library.kiwix.test/content/small_test_2025-12" />
+    <author>
+      <name>Test</name>
+    </author>
+    <publisher>
+      <name>openZIM</name>
+    </publisher>
+    <dc:issued>2025-12-01T00:00:00Z</dc:issued>
+    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/other/small_test_2025-12.zim.meta4" length="1024" />
+  </entry>
+  <entry>
+    <id>urn:uuid:00000000-0000-4000-8000-000000000004</id>
+    <title>Test entry big_test_2026-03</title>
+    <updated>2026-03-10T00:00:00Z</updated>
+    <summary>Fixture for kiwix-zim-updater tests</summary>
+    <language>eng</language>
+    <name>big_test</name>
+    <flavour></flavour>
+    <category>other</category>
+    <tags>_category:other;_ftindex:no;_pictures:no;_videos:no;_details:yes</tags>
+    <articleCount>1</articleCount>
+    <mediaCount>0</mediaCount>
+    <link rel="http://opds-spec.org/image/thumbnail"
+          href="/catalog/v2/illustration/00000000-0000-4000-8000-000000000004/?size=48"
+          type="image/png;width=48;height=48;scale=1"/>
+    <link type="text/html" href="https://browse.library.kiwix.test/content/big_test_2026-03" />
+    <author>
+      <name>Test</name>
+    </author>
+    <publisher>
+      <name>openZIM</name>
+    </publisher>
+    <dc:issued>2026-03-10T00:00:00Z</dc:issued>
+    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/other/big_test_2026-03.zim.meta4" length="16384" />
+  </entry>
+</feed>

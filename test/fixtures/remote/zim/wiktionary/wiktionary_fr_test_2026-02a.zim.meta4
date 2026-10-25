@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metalink xmlns="urn:ietf:params:xml:ns:metalink">
+  <generator>MirrorBrain/2.19.0</generator>
+  <origin dynamic="true">https://download.kiwix.test/zim/wiktionary/wiktionary_fr_test_2026-02a.zim.meta4</origin>
+  <published>2026-02-20T00:00:00Z</published>
+  <publisher>
+    <name>Kiwix project</name>
+    <url>https://kiwix.org</url>
+  </publisher>
+
+  <file name="wiktionary_fr_test_2026-02a.zim">
+    <size>3000</size>
+
+    <!-- internal id: 2 -->
+    <hash type="md5">014f97124d87413d0437ec3e295c5835</hash>
+    <hash type="sha-1">7afb87475fb39cd2f7d37dbb50252a6c408aa6e2</hash>
+    <hash type="sha-256">657f6d03844642cd24036dae28d5c397321b44d155bde066928b436bcb0660e2</hash>
+    <pieces length="4194304" type="sha-1">
+      <hash>7afb87475fb39cd2f7d37dbb50252a6c408aa6e2</hash>
+    </pieces>
+
+    <!-- Mirrors which handle this country (TEST): -->
+    <url location="se" priority="1">https://mirror.kiwix.test/zim/wiktionary/wiktionary_fr_test_2026-02a.zim</url>
+
+    <!-- Mirrors in the rest of the world: -->
+    <url location="fr" priority="2">https://download.kiwix.test/zim/wiktionary/wiktionary_fr_test_2026-02a.zim</url>
+  </file>
+</metalink>

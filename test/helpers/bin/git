@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Test stub for git. Tests must never reach a real repository.
+#
+# Every invocation is logged as one line (all arguments) to $FAKE_GIT_LOG.
+# Behaviour is chosen with FAKE_GIT_MODE:
+#   (unset)       fail loudly: print to stderr and exit 97
+#   other-branch  `rev-parse --abbrev-ref HEAD` prints "dev", all else exits 0
+#   current       `rev-parse --abbrev-ref HEAD` prints "main", all else exits 0
+#                 (so `git diff --quiet` reports "no difference")
+
+if [[ -n "${FAKE_GIT_LOG:-}" ]]; then
+  printf '%s\n' "$*" >>"$FAKE_GIT_LOG"
+fi
+
+case "${FAKE_GIT_MODE:-}" in
+  other-branch | current)
+    if [[ "$*" == *"rev-parse --abbrev-ref HEAD"* ]]; then
+      if [[ "$FAKE_GIT_MODE" == "other-branch" ]]; then
+        echo "dev"
+      else
+        echo "main"
+      fi
+    fi
+    exit 0
+    ;;
+  *)
+    echo "git stub called unexpectedly: git $*" >&2
+    exit 97
+    ;;
+esac

@@ -1,0 +1,115 @@
+# Example Docker Compose / Podman Compose file for kiwix-zim-updater. See "Running with Docker" in README.md.
+#
+#   cp compose.example.yaml compose.yaml   # then adjust the paths and variables below
+#   docker compose up -d --build
+#   docker compose logs -f kiwix-zim-updater
+#
+# The updater starts in dry-run: it only reports what it would download and purge, and changes nothing in the ZIM
+# directory. Once the log looks right, set DRY_RUN to "false" and run `docker compose up -d` again.
+#
+# If a run fails, for example while the internet is down, nothing in the ZIM directory is touched: the ZIMs stay
+# usable offline, the container turns unhealthy, and the next run tries again.
+
+services:
+  kiwix-zim-updater:
+    build: .
+    image: localhost/kiwix-zim-updater:latest
+    container_name: kiwix-zim-updater
+    # Run as the owner of the ZIM directory (find it with `stat -c '%u:%g' /srv/kiwix/zims`), e.g.
+    # `PUID=1000 PGID=1000 docker compose up -d`. The state directory must be writable by this user as well.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    restart: unless-stopped
+    # On `docker compose stop` the updater gets SIGTERM and stops wget; an unfinished download stays a .part file
+    # that the next run resumes. Give it time to finish writing its log before Docker kills it.
+    stop_grace_period: 2m
+    volumes:
+      # The ZIM directory. It must be writable for downloads and purges (a read-only mount means dry-run only).
+      - /srv/kiwix/zims:/data
+      # The working directory: download.log, the kiwix-index catalog cache and the last-run status.
+      # A new named volume is owned by uid 1000; with another PUID, use a bind mount owned by PUID:PGID instead.
+      - kiwix-zim-updater-state:/state
+      # Or a bind mount, owned by PUID:PGID:
+      # - /var/lib/kiwix-zim-updater:/state
+    environment:
+      # true (default): dry-run, nothing in the ZIM directory is created, changed or deleted.
+      # false: really download and purge (-d). Switch only after a dry-run log looked right.
+      DRY_RUN: "true"
+
+      # Time between the end of one run and the start of the next: <number>[s|m|h|d], default 24h.
+      # "once" or 0 runs a single time and exits with the updater's exit code (for cron or systemd timers;
+      # then use `restart: "no"`).
+      RUN_INTERVAL: "24h"
+
+      # Check the sha256 of every download before it replaces the old ZIM (-c). Default true. Web downloads only:
+      # ignored with DOWNLOAD_METHOD=torrent. Turn off only if hashing large ZIMs is too slow for your machine.
+      CHECKSUM: "true"
+
+      # Delete unfinished downloads (.part files) that no run can use any more, because their release left the
+      # catalog, or VERIFY_LIBRARY just verified their finished ZIM as good (--clean-partials). Default true. A .part
+      # file that a later run can still resume is never deleted.
+      CLEAN_PARTIALS: "true"
+
+      # Keep the replaced ZIMs instead of purging them (-p). Default false. Needs space for every old version.
+      SKIP_PURGE: "false"
+
+      # Verify the whole library against the published checksums on every run (-f). Default false. With
+      # DRY_RUN=false, a ZIM that is the current release and fails its check is downloaded again and replaced once
+      # the new file is verified. Reads every ZIM, which takes long on a large library. Not with torrent.
+      VERIFY_LIBRARY: "false"
+
+      # Do not write <name>.zim.sha256 files next to the ZIMs (-S). Default false. These files let VERIFY_LIBRARY
+      # check the library later without the metadata servers.
+      NO_SHA: "false"
+
+      # Only download ZIMs of at least / at most this size (-n / -x), e.g. 500M, 10G, 2Gi (see `man numfmt`).
+      # Default: empty, no limit.
+      MIN_SIZE: ""
+      MAX_SIZE: ""
+
+      # Keep at least this much free space in the ZIM directory after a download (--min-free); a download that
+      # would go below it is skipped and the old ZIM kept, e.g. 50G. Default: empty, the updater's own default (1Gi).
+      MIN_FREE_SPACE: ""
+
+      # Keep a kiwix library file listing the finished ZIMs up to date (--library), for kiwix-serve
+      # --library --monitorLibrary (see the kiwix-serve service below), which then picks up updated ZIMs by itself,
+      # without a restart. Keep it in the ZIM directory: its paths are relative to it. Empty: no library file.
+      LIBRARY_XML: "/data/library.xml"
+
+      # Two-letter upper-case country code to prefer download mirrors from (-l), e.g. DE. Default: empty, Kiwix
+      # picks the mirror.
+      COUNTRY: ""
+
+      # web (default): download the ZIMs over http(s) (-w).
+      # torrent: only download a .torrent file next to each outdated ZIM (-t); a torrent client must do the rest.
+      DOWNLOAD_METHOD: "web"
+
+      # Fetch the catalog on every run instead of using the cached kiwix-index for up to a day (-g). Default false.
+      FORCE_FETCH_INDEX: "false"
+
+      # Advanced: more options for kiwix-zim-updater.sh, split on whitespace and added before the ZIM directory.
+      # Default: empty. -U (self-update) is refused: update by pulling or building a new image.
+      EXTRA_ARGS: ""
+
+      # Paths inside the container. Change them only if you mount the volumes elsewhere.
+      ZIM_DIR: "/data"
+      STATE_DIR: "/state"
+
+  # Optional: serve the library with kiwix-serve, mounting the ZIM directory read-only. It reads the library file
+  # that the updater maintains (LIBRARY_XML above) and reloads it within seconds after every update: a new ZIM is
+  # listed before the old one is purged, and unfinished downloads (.part files) are never listed.
+  # kiwix-serve exits while the library file does not exist yet: the updater writes it on its first run with
+  # DRY_RUN=false, and until then `restart: unless-stopped` keeps restarting kiwix-serve. That is expected.
+  # Tested with ghcr.io/kiwix/kiwix-serve 3.8.2.
+  #
+  # kiwix-serve:
+  #   image: ghcr.io/kiwix/kiwix-serve:latest   # pin a version tag for unattended use
+  #   container_name: kiwix-serve
+  #   restart: unless-stopped
+  #   command: --library --monitorLibrary /data/library.xml
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - /srv/kiwix/zims:/data:ro
+
+volumes:
+  kiwix-zim-updater-state:

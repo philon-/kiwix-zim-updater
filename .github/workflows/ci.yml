@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Show tool versions
+        run: |
+          bash --version | head -1
+          shellcheck --version
+          wget --version | head -1
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show tool versions
+        run: docker version
+
+      - name: Build the image and smoke-test it offline
+        run: make docker-test CONTAINER_ENGINE=docker
+
+      - name: Library test (real ZIMs, official kiwix-serve)
+        run: make library-test CONTAINER_ENGINE=docker

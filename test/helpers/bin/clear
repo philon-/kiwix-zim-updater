@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Test stub for clear: does nothing, but records each call in $FAKE_CLEAR_LOG.
+
+if [[ -n "${FAKE_CLEAR_LOG:-}" ]]; then
+  printf 'clear %s\n' "$*" >>"$FAKE_CLEAR_LOG"
+fi
+exit 0

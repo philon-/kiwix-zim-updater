@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metalink xmlns="urn:ietf:params:xml:ns:metalink">
+  <generator>MirrorBrain/2.19.0</generator>
+  <origin dynamic="true">https://download.kiwix.test/zim/other/small_test_2025-12.zim.meta4</origin>
+  <published>2025-12-01T00:00:00Z</published>
+  <publisher>
+    <name>Kiwix project</name>
+    <url>https://kiwix.org</url>
+  </publisher>
+
+  <file name="small_test_2025-12.zim">
+    <size>1024</size>
+
+    <!-- internal id: 3 -->
+    <hash type="md5">cd894bb51b1996f35d1497908352b936</hash>
+    <hash type="sha-1">06429a813db6b0541348655383b92852d5c70181</hash>
+    <hash type="sha-256">bbda12dda5e5c1d2a792315e11db722bb91215fb3a9828b4c86c314890c674c1</hash>
+    <pieces length="4194304" type="sha-1">
+      <hash>06429a813db6b0541348655383b92852d5c70181</hash>
+    </pieces>
+
+    <!-- Mirrors which handle this country (TEST): -->
+    <url location="se" priority="1">https://mirror.kiwix.test/zim/other/small_test_2025-12.zim</url>
+
+    <!-- Mirrors in the rest of the world: -->
+    <url location="fr" priority="2">https://download.kiwix.test/zim/other/small_test_2025-12.zim</url>
+  </file>
+</metalink>

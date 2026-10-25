@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Test stub for df. With FAKE_DF_AVAIL set, `df -B1 --output=avail <dir>` reports that many available bytes, so the
+# free-space checks do not depend on the machine running the tests. Anything else goes to the real df.
+if [[ -n "${FAKE_DF_AVAIL:-}" ]] && [[ " $* " == *" --output=avail "* ]]; then
+  echo "Avail"
+  echo "$FAKE_DF_AVAIL"
+  exit 0
+fi
+stub_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PATH="${PATH//"$stub_dir:"/}" exec df "$@"
