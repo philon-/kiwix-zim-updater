@@ -32,9 +32,9 @@ listed() {
   make_local_zim "$WOLD"
   run_updater -d --library "$LIB" "$ZIMS"
   assert_success
-  # One rebuild added the old and then the new ZIM: both were listed while the old one still existed
-  run grep -A1 -F "$WOLD" "$FAKE_KIWIX_MANAGE_LOG"
-  assert_output --partial "$ZIMS/$W"
+  # The new ZIM was added to the library at a moment when the old one still existed
+  run grep -E "^$W:.* $WOLD( |\$)" "$FAKE_KIWIX_MANAGE_SEEN"
+  assert_success
 }
 
 @test "library: paths are relative to the library file, so other containers can mount it elsewhere" {

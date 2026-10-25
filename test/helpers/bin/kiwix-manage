@@ -2,9 +2,16 @@
 # Test stub for kiwix-manage (kiwix-tools). Supports `kiwix-manage LIBRARY add ZIM`, the only form the script uses,
 # and writes a library in the real format: one <book> per ZIM, its path relative to the library's directory.
 # A ZIM whose content starts with "BADZIM" cannot be read: like the real tool, the call then fails and writes nothing.
-# Every call is logged to $FAKE_KIWIX_MANAGE_LOG.
+# Every call is logged to $FAKE_KIWIX_MANAGE_LOG. $FAKE_KIWIX_MANAGE_SEEN gets one line per call, the added ZIM's
+# name followed by every .zim in its directory at that moment, so tests can tell what existed when it was listed.
 if [[ -n "${FAKE_KIWIX_MANAGE_LOG:-}" ]]; then
   printf '%s\n' "$*" >>"$FAKE_KIWIX_MANAGE_LOG"
+fi
+if [[ -n "${FAKE_KIWIX_MANAGE_SEEN:-}" ]] && [[ $# -eq 3 ]]; then
+  seen=("$(dirname "$3")"/*.zim)
+  printf '%s:' "$(basename "$3")" >>"$FAKE_KIWIX_MANAGE_SEEN"
+  for f in "${seen[@]}"; do [[ -e "$f" ]] && printf ' %s' "$(basename "$f")" >>"$FAKE_KIWIX_MANAGE_SEEN"; done
+  echo >>"$FAKE_KIWIX_MANAGE_SEEN"
 fi
 if [[ $# -ne 3 ]] || [[ "$2" != "add" ]]; then
   echo "kiwix-manage stub: only 'LIBRARY add ZIM' is supported" >&2
