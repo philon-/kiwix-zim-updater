@@ -401,9 +401,16 @@ flags() {
     [[ -f "$ZIMPath$zimFile" ]] && LocalZIMArray+=("$zimFile")
   done
 
+  # The title of each ZIM: its name without the _YYYY-MM.zim date (empty if it has none)
+  local -a titles=()
+  for index in "${!LocalZIMArray[@]}"; do
+    titles[index]=""
+    [[ "${LocalZIMArray[$index]}" =~ ^(.*)_[0-9]{4}-[0-9]{2}[a-zA-Z]?\.[zZ][iI][mM]$ ]] && titles[index]="${BASH_REMATCH[1]}"
+  done
+
   for index in "${!LocalZIMArray[@]}" ; do
     duplicated=0
-    myBasename=$(echo "${LocalZIMArray[$index]}" | grep -ioP "^.*(?=_$COMPLETE_ENDING_REGEX$)")
+    myBasename="${titles[$index]}"
 
     # Sorting cannot reliably sort the month string so we need to check it to be sure
     MyDate="$(zim_date "${LocalZIMArray[$index]}")"
@@ -414,7 +421,7 @@ flags() {
       else
         if [[ $index -ge $scanIndex ]] || [[ -f "${ZIMPath}.~lock.${LocalZIMArray[$scanIndex]}" ]]; then continue; fi
       fi
-      scanBasename=$(echo "${LocalZIMArray[$scanIndex]}" | grep -ioP "^.*(?=_$COMPLETE_ENDING_REGEX$)")
+      scanBasename="${titles[$scanIndex]}"
 
       if [[ "$myBasename" == "$scanBasename" ]]; then
         if [[ -f "${ZIMPath}.~lock.${LocalZIMArray[$index]}" ]]; then
@@ -538,18 +545,18 @@ acquire_zim_dir_lock() {
 # The extension is matched case-insensitively like the ZIM listing (foo_2026-01.ZIM), and the date is printed in
 # lower case so it compares like the catalog's dates.
 zim_date() {
-  echo "$1" | grep -ioP "$YEAR_REGEX-$MONTH_REGEX(?=$END_ANCHOR_REGEX$)" | tr '[:upper:]' '[:lower:]'
+  if [[ "${1,,}" =~ ([0-9]{4}-[0-9]{2}[a-z]?)\.zim$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
 }
 
 # zim_is_newer <date> <other date> - True if the first YYYY-MM[a-z] date (as printed by zim_date) is newer than the
 # second. The year is compared first, then the month as a string, so 2026-02a is newer than 2026-02, which is newer
 # than 2026-01b. Equal dates are not newer, and an empty date is older than any other.
 zim_is_newer() {
-  local year month otherYear otherMonth
-  year="$(echo "$1" | grep -oP "$YEAR_REGEX(?=-$MONTH_REGEX)")"
-  month="$(echo "$1" | grep -oP "(?<=$YEAR_REGEX-)$MONTH_REGEX")"
-  otherYear="$(echo "$2" | grep -oP "$YEAR_REGEX(?=-$MONTH_REGEX)")"
-  otherMonth="$(echo "$2" | grep -oP "(?<=$YEAR_REGEX-)$MONTH_REGEX")"
+  local re='([0-9]{4})-([0-9]{2}[a-z]?)' year="" month="" otherYear="" otherMonth=""
+  [[ "$1" =~ $re ]] && year="${BASH_REMATCH[1]}" && month="${BASH_REMATCH[2]}"
+  [[ "$2" =~ $re ]] && otherYear="${BASH_REMATCH[1]}" && otherMonth="${BASH_REMATCH[2]}"
   [[ "$year" > "$otherYear" ]] || { [[ "$year" == "$otherYear" ]] && [[ "$month" > "$otherMonth" ]]; }
 }
 
