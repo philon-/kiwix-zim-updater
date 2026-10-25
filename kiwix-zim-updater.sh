@@ -1069,7 +1069,13 @@ main() {
           continue
         else
           # Before we actually download, let's just check to see that it isn't already in the folder.
-          if [[ -f "$LockFilePath" ]]; then
+          if [[ -f "$LockFilePath" ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$FilePath" ]] && \
+            [[ $(stat -c %s "$FilePath") -eq $ExpectedSize ]]; then
+            # The interrupted download is already complete (e.g. the run was killed while hashing it). Do not ask wget
+            # to resume it: Wget2 appends the whole body again when a server ignores the range request. Just verify it.
+            echo -e "${GREEN_REGULAR}    ✓ Status : Interrupted download is already complete, verifying it${CLEAR}"
+            echo "Interrupted download is already complete, verifying it : $FilePath" >>"$LOG_FILE"
+          elif [[ -f "$LockFilePath" ]]; then
             [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
             [[ $DEBUG -eq 1 ]] && echo "Continue Download : $FilePath" >>"$LOG_FILE"
           elif [[ -f $FilePath ]]; then # New ZIM already found, we don't need to download it.

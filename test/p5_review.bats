@@ -37,29 +37,40 @@ keep_copy() {
   assert_output --partial 'the checksum could not be verified'
 }
 
-@test "R2: an intact only copy with a stale lock survives a transient failure and is finished next run" {
+@test "R2: an intact only copy with a stale lock survives and is never re-downloaded" {
   make_local_zim "$W" --from-remote "$WREMOTE"
   make_local_sha256 "$W"
   touch "$ZIMS/.~lock.$W"
+  # Since N11 a complete locked file is verified instead of resumed, so a network failure cannot touch it
   FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
-  assert_failure 1
-  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  [[ -f "$ZIMS/$W.sha256" ]]
-  [[ -f "$ZIMS/.~lock.$W" ]]
-  run_updater -d "$ZIMS"
   assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ -f "$ZIMS/$W.sha256" ]]
   [[ ! -e "$ZIMS/.~lock.$W" ]]
+  run wget_downloads
+  assert_output ''
 }
 
-@test "R2: a complete new download with a stale lock is kept after a transient failure (old kept too)" {
+@test "R2: a complete new download with a stale lock completes the update without downloading again" {
   make_local_zim "$WOLD"
-  keep_copy "$WOLD"
   cp "$(remote_file "$WREMOTE")" "$ZIMS/$W"
   touch "$ZIMS/.~lock.$W"
   FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
-  assert_failure 1
+  assert_success
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ ! -e "$ZIMS/$WOLD" ]]
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
+}
+
+@test "R2: a shorter interrupted download whose resume fails is kept for the next run" {
+  make_local_zim "$WOLD"
+  keep_copy "$WOLD"
+  head -c 1000 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
+  touch "$ZIMS/.~lock.$W"
+  FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
+  assert_failure 1
+  [[ -s "$ZIMS/$W" ]]
+  [[ -f "$ZIMS/.~lock.$W" ]]
   cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
 }
 
@@ -222,4 +233,31 @@ keep_copy() {
   assert_output --partial -- '--no-metalink'
   run bash -c 'grep -e " -O " "$1" | grep -v -e " -O - " | grep -v -e --no-metalink' _ "$FAKE_WGET_LOG"
   assert_output ''
+}
+
+@test "N11: a complete locked download is verified, not re-requested (Wget2 would append it again)" {
+  make_local_zim "$W" --from-remote "$WREMOTE"
+  make_local_sha256 "$W"
+  touch "$ZIMS/.~lock.$W"
+  export FAKE_WGET_FLAVOR=wget2
+  run_updater -d -c "$ZIMS"
+  assert_success
+  assert_output --partial 'Interrupted download is already complete, verifying it'
+  assert_output --partial 'Checksum passed'
+  cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
+  run wget_downloads
+  assert_output ''
+}
+
+@test "N11: a complete locked download that fails -c is deleted and the old ZIM is kept" {
+  make_local_zim "$WOLD"
+  keep_copy "$WOLD"
+  LC_ALL=C tr '\000-\377' '\001-\377\000' <"$(remote_file "$WREMOTE")" >"$ZIMS/$W"
+  touch "$ZIMS/.~lock.$W"
+  run_updater -d -c "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'Checksum failed'
+  cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
+  [[ ! -e "$ZIMS/$W" ]]
 }
