@@ -73,7 +73,6 @@ keep_copy() {
 }
 
 @test "F4: -f in dry-run writes no .sha256 into the ZIM dir" {
-  skip "F4: the verify path writes .sha256 files even in dry-run"
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   local before
   before="$(zim_dir_snapshot)"
@@ -83,7 +82,6 @@ keep_copy() {
 }
 
 @test "F4: a failed meta4 fetch does not write an empty-hash .sha256" {
-  skip "F4: the .sha256 is written with an empty hash when the meta4 fetch failed"
   make_local_zim "$OLD_WP"
   export FAKE_WGET_META_FAIL=1
   run_updater -d "$ZIMS"
@@ -94,7 +92,7 @@ keep_copy() {
 }
 
 @test "F4: -f -d with a failed meta4 fetch keeps a good cached .sha256" {
-  skip "F4: the verify path overwrites the cached .sha256 with an empty hash"
+  skip "N3: blocked by N3 (the ZIM, and with it its .sha256, is deleted on an empty expected size)"
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   make_local_sha256 "$NEW_WP"
   cp "$ZIMS/$NEW_WP.sha256" "$SANDBOX/sha256.orig"

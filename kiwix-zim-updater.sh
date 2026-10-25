@@ -396,6 +396,19 @@ detect_wget_flavor() {
   fi
 }
 
+# hash_matches <name> <hash> - True if $ZIMPath<name> has the given sha256. Needs no .sha256 file on disk.
+hash_matches() {
+  (cd "$ZIMPath" && printf '%s  %s\n' "$2" "$1" | sha256sum --status -c - 2>/dev/null)
+}
+
+# write_checksum_file <name> <hash> - Store the checksum next to the ZIM for later offline verification (-f).
+# Never in dry-run, and never with a hash that does not look like a sha256 (e.g. when the meta4 fetch failed).
+write_checksum_file() {
+  [[ $DEBUG -eq 0 ]] || return 0
+  [[ "$2" =~ ^[0-9a-f]{64}$ ]] || return 0
+  echo "$2 $1" >"$ZIMPath$1.sha256.tmp" && mv -f "$ZIMPath$1.sha256.tmp" "$ZIMPath$1.sha256"
+}
+
 # download_file - Download (or resume) $2 into $1, showing progress and logging it. Returns wget's own exit status,
 # not tee's.
 download_file() {
@@ -753,7 +766,7 @@ if [ $AnyDownloads -eq 1 ]; then
         # actually verify the file
         echo -e "${BLUE_REGULAR}    Calculating checksum for : $OldZIM${CLEAR}"
         echo "Calculating checksum for : $OldZIM" >>download.log
-        [[ ${LocalRequiresDownloadArray[$z]} -ne 2 ]] && echo "$ExpectedHash $OldZIM" >"$OldZIMPath.sha256"
+        [[ ${LocalRequiresDownloadArray[$z]} -ne 2 ]] && write_checksum_file "$OldZIM" "$ExpectedHash"
         if [[ ${LocalRequiresDownloadArray[$z]} -ne 2 ]] && [[ $(du -b "$OldZIMPath" | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
           RequiresDownload=1
           if [[ $DEBUG -eq 0 ]]; then
@@ -773,7 +786,7 @@ if [ $AnyDownloads -eq 1 ]; then
           echo
         elif [[ ${#ExpectedHash} -ne 64 ]]; then
           echo "    This hash doesn't look quite right...skipping"
-        elif (cd "$ZIMPath" && ! sha256sum --status -c "$OldZIM.sha256"); then
+        elif ! hash_matches "$OldZIM" "$ExpectedHash"; then
           # we checked a very old file, but we will choose to not replace it because we cannot, so we will leave it. A regular update will purge it naturally
           [[ ${LocalRequiresDownloadArray[$z]} -eq 2 ]] && echo -e "${RED_BOLD}    Checksum failed, online file not found, continuing${CLEAR}" && echo && continue
           if [[ $DEBUG -eq 0 ]]; then
@@ -878,7 +891,7 @@ if [ $AnyDownloads -eq 1 ]; then
       fi
     fi
 
-    [[ $DEBUG -eq 0 ]] && echo "$ExpectedHash $NewZIM" 2>/dev/null 1>"$NewZIMPath.sha256"
+    [[ $DownloadFailed -ne 1 ]] && write_checksum_file "$NewZIM" "$ExpectedHash"
     if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]]; then
       echo -e "${BLUE_REGULAR}    Calculating checksum for : $NewZIMPath${CLEAR}"
       if [[ $(du -b "$NewZIMPath" 2>/dev/null | grep -ioP "^\d+") -ne "$ExpectedSize" ]]; then
@@ -891,7 +904,7 @@ if [ $AnyDownloads -eq 1 ]; then
         fi
       elif [[ ${#ExpectedHash} -ne 64 ]]; then
         echo -e "${YELLOW_BOLD}    This hash doesn't look quite right...skipping${CLEAR}"
-      elif [[ $DEBUG -eq 0 ]] && (cd "$ZIMPath" && ! sha256sum --status -c "$NewZIM.sha256"); then
+      elif [[ $DEBUG -eq 0 ]] && ! hash_matches "$NewZIM" "$ExpectedHash"; then
         echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt file${CLEAR}"
         rm "$NewZIMPath"
         DownloadFailed=1
