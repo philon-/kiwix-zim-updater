@@ -34,8 +34,6 @@ SCRIPT="$(readlink -f "$0")"
 SCRIPTFILE="$(basename "$SCRIPT")"
 SCRIPTPATH="$(dirname "$SCRIPT")"
 CALLEDSCRIPTNAME="$0"
-CALLEDSCRIPTFILE="$(basename "$CALLEDSCRIPTNAME")"
-CALLEDSCRIPTPATH="$(dirname "$CALLEDSCRIPTNAME")"
 ARGS=("$@")
 BRANCH="main"
 SKIP_UPDATE=0
@@ -639,11 +637,6 @@ fi
 # Display Header
 echo "=========================================="
 echo " kiwix-zim-updater"
-if [[ "$CALLEDSCRIPTFILE" == "kiwix-zim.sh" ]]; then
-  echo " WARNING: kiwix-zim.sh has been deprecated "
-  echo " in favor of kiwix-zim-updater             "
-  echo "WARNING: kiwix-zim has been deprecated in favor of kiwix-zim-updater. kiwix-zim will be a hard link to the new script name until at least 2025-01-01" >> "$LOG_FILE"
-fi
 echo "       download.kiwix.org ZIM Updater"
 echo
 echo "   v$VER by DocDrydenn and jojo2357"
@@ -1160,11 +1153,6 @@ else
   echo -e "${GREEN_REGULAR}    ✓ Download: Nothing to download.${CLEAR}"
   echo "✓ Download: Nothing to download." >> "$LOG_FILE"
   echo
-fi
-
-if [[ "$CALLEDSCRIPTFILE" == "kiwix-zim.sh" ]]; then
-  echo "WARNING: kiwix-zim has been deprecated in favor of kiwix-zim-updater. kiwix-zim will be a hard link to the new script name until at least 2025-01-01.\n This exit code is nonzero, but the script has not errored out. This is simply so you may notice and switch to using kiwix-zim-updater " >> "$LOG_FILE"
-  exit 2
 fi
 
 if [[ $AnyDownloadFailed -eq 1 ]]; then
