@@ -735,15 +735,13 @@ download_file() {
   return "${PIPESTATUS[0]}"
 }
 
-# mirror_search - Find ZIM URL Priority #1 mirror from meta4 Function
+# mirror_search <catalog index> - Read the published size and sha256 from the ZIM's meta4, and set DownloadURL to its
+# priority 1 mirror (or the direct URL, or the torrent with -t)
 mirror_search() {
+  local RemotePath="${RemotePaths[$1]}" MetaInfo RawMirror
   IsMirror=0
   DownloadURL=""
-  RemotePath="${RemotePaths[${LocalZIMRemoteIndexArray[$z]}]}"
-  ExpectedSize="${FileSizes[${LocalZIMRemoteIndexArray[$z]}]}"
 
-  # If we need the checksum, we need a link  and the hash, which we can get both by using .meta4, otherwise we only need
-  # Silently fetch (via wget) the associated meta4 xml and extract the mirror URL marked priority="1"
   MetaInfo=$(wget "${WGET_NET_OPTS[@]}" "${WGET_META_OPTS[@]}" -q -O - "$BaseURL$RemotePath.meta4?country=$COUNTRY_CODE")
   ExpectedSize=$(echo "$MetaInfo" | grep '<size>' | grep -Po '\d+')
   ExpectedHash=$(echo "$MetaInfo" | grep '<hash type="sha-256">' | grep -Poi '(?<="sha-256">)[a-f\d]{64}(?=<)')
@@ -1045,6 +1043,7 @@ main() {
   if [ $AnyDownloads -eq 1 ]; then
     for ((z = 0; z < ${#LocalZIMNameArray[@]}; z++)); do # Iterate through the download queue.
       Action=${LocalActionArray[$z]}
+      RemoteIndex=${LocalZIMRemoteIndexArray[$z]}
       [[ $Action -eq $ACT_NONE ]] && continue
 
       # Per-file state: nothing may carry over from the previous ZIM (or leak in from the environment)
@@ -1068,12 +1067,12 @@ main() {
         NewZIMPath="$OldZIMPath"
       elif [[ $Action -eq $ACT_VERIFY_ONLINE ]]; then
         # Outdated ZIM: verify it against its own published checksum, not against the newer release's meta4
-        ExpectedHash=$(wget "${WGET_NET_OPTS[@]}" -q -O - "$BaseURL${RemoteCategory[${LocalZIMRemoteIndexArray[$z]}]}/$OldZIM.sha256" 2>/dev/null | grep -ioP "^[0-9a-f]{64}")
+        ExpectedHash=$(wget "${WGET_NET_OPTS[@]}" -q -O - "$BaseURL${RemoteCategory[$RemoteIndex]}/$OldZIM.sha256" 2>/dev/null | grep -ioP "^[0-9a-f]{64}")
 
         NewZIM="$OldZIM"
         NewZIMPath="$OldZIMPath"
       else
-        mirror_search # Let's look for a mirror URL first.
+        mirror_search "$RemoteIndex"
 
         # -f without metadata (offline, or the meta4 fetch failed): fall back to the checksum stored on an earlier run
         if [[ $VERIFY_LIBRARY -eq 1 ]] && ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]] && [[ -f "$OldZIMPath.sha256" ]]; then
@@ -1083,7 +1082,7 @@ main() {
           echo "Metadata unavailable for $OldZIM, verifying against the cached checksum" >>"$LOG_FILE"
         fi
 
-        NewZIM=${RemoteFiles[${LocalZIMRemoteIndexArray[$z]}]}
+        NewZIM=${RemoteFiles[$RemoteIndex]}
         NewZIMPath=$ZIMPath$NewZIM
       fi
 
@@ -1235,7 +1234,7 @@ main() {
             # verified in place, otherwise the replacement is downloaded into .part and renamed over it once verified.
             # Nothing is ever written into the locked file itself (Wget2 would append to it when a server ignores the
             # range request).
-            if [[ -f "$NewZIMPath" ]] && ! other_local_version_exists "${Basenames[${LocalZIMRemoteIndexArray[$z]}]}" "$NewZIM"; then
+            if [[ -f "$NewZIMPath" ]] && ! other_local_version_exists "${Basenames[$RemoteIndex]}" "$NewZIM"; then
               if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -eq $ExpectedSize ]] && [[ ! -e "$PartPath" ]]; then
                 DownloadTarget="$NewZIMPath"
               fi
