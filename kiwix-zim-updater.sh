@@ -56,6 +56,8 @@ DOWNLOAD_METHOD=1 # 1: web 2: torrent
 SKIP_PURGE=0
 COUNTRY_CODE="" # -l: preferred mirror country, empty for kiwix's default
 POSITIONAL_ARGS=()
+# "*** Simulated *** " in dry-run, set once the ZIM directory is known (an unwritable one forces dry-run)
+SIMULATED=""
 # Per-file download state, reset again for every ZIM in the download loop
 DownloadFailed=0
 IsMirror=0
@@ -558,8 +560,7 @@ zim_is_newer() {
 # versions of this script, which downloaded straight into the ZIM's name) are never deleted; only a marker whose file
 # is gone is removed. In dry-run nothing is changed, the would-be actions are listed.
 cleanup_partials() {
-  local partFiles lockFiles part partName lock lockName header=0 simulated=""
-  [[ $DEBUG -eq 1 ]] && simulated="*** Simulated *** "
+  local partFiles lockFiles part partName lock lockName header=0
   partFiles=("$ZIMPath"*.zim.part)
   lockFiles=("$ZIMPath".~lock.*.zim)
   [[ ${#partFiles[@]} -eq 0 ]] && [[ ${#lockFiles[@]} -eq 0 ]] && return 0
@@ -576,7 +577,7 @@ cleanup_partials() {
     elif [[ " ${RemoteFiles[*]} " != *" $partName "* ]] || [[ " ${VerifiedZIMs[*]} " == *" $partName "* ]]; then
       # Useless: the release left the catalog so it can never be resumed, or its finished ZIM was just verified good
       if [[ $CLEAN_PARTIALS -eq 1 ]]; then
-        say "${BLUE_BOLD}" "  ${simulated}Removing unfinished download that can no longer be used: $part"
+        say "${BLUE_BOLD}" "  ${SIMULATED}Removing unfinished download that can no longer be used: $part"
         [[ $DEBUG -eq 0 ]] && rm -f "$part"
       else
         echo -e "  ${YELLOW_BOLD}Unfinished download that can no longer be used: $part (--clean-partials removes it)${CLEAR}"
@@ -593,9 +594,9 @@ cleanup_partials() {
     lockName="${lock##*/}"
     lockName="${lockName#.~lock.}"
     if [[ ! -f "$ZIMPath$lockName" ]]; then
-      say "${BLUE_BOLD}" "  ${simulated}Removing stale lock without a download: $lock"
+      say "${BLUE_BOLD}" "  ${SIMULATED}Removing stale lock without a download: $lock"
       if [[ -f "$ZIMPath$lockName.sha256" ]]; then
-        say "${BLUE_BOLD}" "  ${simulated}Removing its abandoned checksum: $ZIMPath$lockName.sha256"
+        say "${BLUE_BOLD}" "  ${SIMULATED}Removing its abandoned checksum: $ZIMPath$lockName.sha256"
         [[ $DEBUG -eq 0 ]] && rm -f "$ZIMPath$lockName.sha256"
       fi
       [[ $DEBUG -eq 0 ]] && rm -f "$lock"
@@ -680,6 +681,11 @@ rebuild_library() {
   say "${RED_BOLD}" "    ✗ Library: could not write $LIBRARY_XML"
   LibraryFailed=1
   return 1
+}
+
+# log_stamp <Start|End> - Log the time a ZIM's processing started or ended
+log_stamp() {
+  echo "$1 : $(date -u)${SIMULATED:+ *** Simulation ***}" >>"$LOG_FILE"
 }
 
 # free_bytes <dir> - Print the bytes available to this user in the file system holding <dir> (empty if unknown)
@@ -871,12 +877,11 @@ main() {
   echo "=========================================="
   echo
   echo "            DRY-RUN/SIMULATION"
-  [[ $DEBUG -eq 1 ]] && echo "               - ENABLED -"
-  [[ $DEBUG -eq 1 ]] && echo
-  [[ $DEBUG -eq 1 ]] && echo "           Use '-d' to disable."
-  [[ $DEBUG -eq 0 ]] && echo "               - DISABLED -"
-  [[ $DEBUG -eq 0 ]] && echo
-  [[ $DEBUG -eq 0 ]] && echo "             !!! Caution !!!"
+  if [[ $DEBUG -eq 1 ]]; then
+    printf '%s\n' "               - ENABLED -" "" "           Use '-d' to disable."
+  else
+    printf '%s\n' "               - DISABLED -" "" "             !!! Caution !!!"
+  fi
   echo
   echo "=========================================="
   echo
@@ -889,6 +894,7 @@ main() {
 
   # Second, Flag Check.
   flags "$@"
+  [[ $DEBUG -eq 1 ]] && SIMULATED="*** Simulated *** "
 
   # Pick up ZIMs added or removed by hand since the last run (writes only when something changed)
   rebuild_library
@@ -965,12 +971,10 @@ main() {
     if [ $VERIFY_LIBRARY -eq 1 ] && [ $FileSizeAcceptable -eq 0 ]; then
       if [ $FileTooSmall -eq 1 ]; then
         LocalActionArray+=("$ACT_NONE")
-        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Verification skipped due to file size (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
-        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Verification skipped due to file size (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
+        echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Verification skipped due to file size (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
       elif [ $FileTooLarge -eq 1 ]; then
         LocalActionArray+=("$ACT_NONE")
-        [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Verification skipped due to file size (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
-        [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Verification skipped due to file size (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
+        echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Verification skipped due to file size (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize"))${CLEAR}"
       fi
     elif [[ "$MatchingFileName" == "$FileName" ]]; then
       if [ $VERIFY_LIBRARY -eq 1 ]; then
@@ -1005,12 +1009,10 @@ main() {
       else
         if [ $FileTooSmall -eq 1 ]; then
           LocalActionArray+=("$ACT_NONE")
-          [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
-          [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+          echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Update skipped (minimum: $(numfmt --to=iec-i "$MIN_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
         elif [ $FileTooLarge -eq 1 ]; then
           LocalActionArray+=("$ACT_NONE")
-          [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Update skipped (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
-          [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ *** Simulated ***  Update skipped (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
+          echo -e "${GREEN_REGULAR}    ✓ ${SIMULATED}Update skipped (maximum: $(numfmt --to=iec-i "$MAX_SIZE"), download size: $(numfmt --to=iec-i "$MatchingSize")). New version: $MatchedDate${CLEAR}"
         elif ! zim_is_newer "$MatchedDate" "$LocalDate"; then
           LocalActionArray+=("$ACT_NONE")
           echo "    ✗ No new update"
@@ -1088,30 +1090,24 @@ main() {
       if [ $VERIFY_LIBRARY -eq 0 ]; then
         if [[ $DOWNLOAD_METHOD -eq 2 ]]; then
           if [[ -f "$NewZIMPath" ]]; then
-            [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : ZIM already exists on disk. Skipping download.${CLEAR}"
-            [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  ZIM already exists on disk. Skipping download.${CLEAR}"
+            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM already exists on disk. Skipping download.${CLEAR}"
             echo
           elif [[ -f $TorrentFilePath ]]; then
-            [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : Torrent already exists on disk. Skipping download.${CLEAR}"
-            [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  Torrent already exists on disk. Skipping download.${CLEAR}"
+            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}Torrent already exists on disk. Skipping download.${CLEAR}"
             echo
           else
-            [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : Torrent doesn't exist on disk. Downloading...${CLEAR}"
-            [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  Torrent doesn't exist on disk. Downloading...${CLEAR}"
+            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}Torrent doesn't exist on disk. Downloading...${CLEAR}"
             RequiresDownload=1
           fi
         elif [[ -f "$NewZIMPath" ]] && ! [[ -f "$LockFilePath" ]]; then # New ZIM already found, and no interruptions, we don't need to download it.
-          [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : ZIM already exists on disk. Skipping download.${CLEAR}"
-          [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  ZIM already exists on disk. Skipping download.${CLEAR}"
+          echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM already exists on disk. Skipping download.${CLEAR}"
           echo
         else # New ZIM not found, so we'll go ahead and download it.
           RequiresDownload=1
           if [[ -f $LockFilePath ]] || [[ -f "$PartPath" ]]; then
-            [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : ZIM download was interrupted. Continuing...${CLEAR}"
-            [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  ZIM download was interrupted. Continuing...${CLEAR}"
+            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM download was interrupted. Continuing...${CLEAR}"
           else
-            [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : ZIM doesn't exist on disk. Downloading...${CLEAR}"
-            [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  ZIM doesn't exist on disk. Downloading...${CLEAR}"
+            echo -e "${GREEN_REGULAR}    ✓ Status : ${SIMULATED}ZIM doesn't exist on disk. Downloading...${CLEAR}"
           fi
           echo
         fi
@@ -1201,8 +1197,7 @@ main() {
             say "${GREEN_BOLD}" "    ✓ Status : Checksum passed"
             VerifiedZIMs+=("$OldZIM")
 
-            [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>"$LOG_FILE"
-            [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>"$LOG_FILE"
+            log_stamp End
 
 
             echo
@@ -1213,8 +1208,7 @@ main() {
         fi
       fi
       echo >>"$LOG_FILE"
-      [[ $DEBUG -eq 0 ]] && echo "Start : $(date -u)" >>"$LOG_FILE"
-      [[ $DEBUG -eq 1 ]] && echo "Start : $(date -u) *** Simulation ***" >>"$LOG_FILE"
+      log_stamp Start
       # Here is where we actually download the files and log to the download.log file.
       if [[ $RequiresDownload -eq 1 ]]; then
         [[ $IsMirror -eq 0 ]] && echo -e "${BLUE_REGULAR}    Download (direct) : $DownloadURL${CLEAR}"
@@ -1397,8 +1391,7 @@ main() {
 
       # In all of these cases nothing is purged: a failed download stays in its .part file to be resumed next run
       if [[ $DownloadFailed -eq 1 ]] || [[ $SKIP_PURGE -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 1 ]]; then
-        [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>"$LOG_FILE"
-        [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>"$LOG_FILE"
+        log_stamp End
         [[ $DEBUG -eq 0 ]] && [[ $SKIP_PURGE -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm -f "$LockFilePath"
         [[ $DEBUG -eq 0 ]] && [[ $VERIFY_LIBRARY -eq 1 ]] && [[ $RequiresDownload -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && rm -f "$LockFilePath"
         continue
@@ -1440,8 +1433,7 @@ main() {
 
       #########################################
 
-      [[ $DEBUG -eq 0 ]] && echo "End : $(date -u)" >>"$LOG_FILE"
-      [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>"$LOG_FILE"
+      log_stamp End
     done
 
   else
