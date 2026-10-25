@@ -348,6 +348,16 @@ usage_error() {
   usage_example 2
 }
 
+# set_size <variable> <what> <option> [<value>] - Set <variable> to <value> in bytes (numfmt units such as 10G or 1Gi),
+# or exit 2 with a usage error
+set_size() {
+  local bytes
+  [[ $# -lt 4 ]] && usage_error "$3 requires a size"
+  bytes=$(numfmt --from=auto "$4" 2>/dev/null)
+  [[ "$bytes" =~ ^[0-9]+$ ]] || usage_error "Invalid $2: '$4'"
+  printf -v "$1" '%s' "$bytes"
+}
+
 # flags - Flag and ZIM Processing Functions
 flags() {
   say "${YELLOW_BOLD}" "2. Preprocessing..."
@@ -785,11 +795,8 @@ main() {
         shift # discard argument
         ;;
       -n | --min-size)
-        [[ $# -lt 2 ]] && usage_error "$1 requires a size"
-        shift                               # discard -n argument
-        MIN_SIZE=$(numfmt --from=auto "$1" 2>/dev/null) # convert passed arg to bytes
-        [[ "$MIN_SIZE" =~ ^[0-9]+$ ]] || usage_error "Invalid minimum size: '$1'"
-        shift                               # discard value
+        set_size MIN_SIZE "minimum size" "$@"
+        shift 2
         ;;
       --library)
         { [[ $# -lt 2 ]] || [[ -z "$2" ]] || [[ "$2" == -* ]]; } && usage_error "$1 requires a file name"
@@ -799,18 +806,12 @@ main() {
         shift
         ;;
       --min-free)
-        [[ $# -lt 2 ]] && usage_error "$1 requires a size"
-        shift
-        MIN_FREE=$(numfmt --from=auto "$1" 2>/dev/null)
-        [[ "$MIN_FREE" =~ ^[0-9]+$ ]] || usage_error "Invalid free space reserve: '$1'"
-        shift
+        set_size MIN_FREE "free space reserve" "$@"
+        shift 2
         ;;
       -x | --max-size)
-        [[ $# -lt 2 ]] && usage_error "$1 requires a size"
-        shift                               # discard -x argument
-        MAX_SIZE=$(numfmt --from=auto "$1" 2>/dev/null) # convert passed arg to bytes
-        [[ "$MAX_SIZE" =~ ^[0-9]+$ ]] || usage_error "Invalid maximum size: '$1'"
-        shift                               # discard value
+        set_size MAX_SIZE "maximum size" "$@"
+        shift 2
         ;;
       -l | --location)
         { [[ $# -lt 2 ]] || [[ "$2" == -* ]]; } && usage_error "$1 requires a country code"
