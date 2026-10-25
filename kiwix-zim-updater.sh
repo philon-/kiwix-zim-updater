@@ -1130,7 +1130,6 @@ main() {
         fi
       fi
 
-      [[ $DownloadFailed -ne 1 ]] && write_checksum_file "$NewZIM" "$ExpectedHash"
       # In -f mode a file that was not (re-)downloaded has already been verified above
       if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
         echo -e "${BLUE_REGULAR}    Calculating checksum for : $NewZIMPath${CLEAR}"
@@ -1153,10 +1152,11 @@ main() {
         else
           echo -e "${GREEN_BOLD}    ✓ Checksum passed${CLEAR}"
         fi
-        #            rm "$NewZIMPath.sha256"
-        #            rm "$LockFilePath"
         echo
       fi
+
+      # Only a file that passed every check gets a checksum file
+      [[ $DownloadFailed -ne 1 ]] && write_checksum_file "$NewZIM" "$ExpectedHash"
 
       echo >> "$LOG_FILE"
       [[ $DownloadFailed -eq 1 ]] && echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"

@@ -62,3 +62,21 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   refute_output --partial 'Download (mirror)'
   refute_output --partial 'Download (direct)'
 }
+
+@test "checksum files: a download that fails -c leaves no checksum file behind" {
+  make_local_zim "$WOLD"
+  export FAKE_WGET_CORRUPT="$W"
+  run_updater -d -c "$ZIMS"
+  assert_failure 1
+  [[ ! -e "$ZIMS/$W" ]]
+  [[ ! -e "$ZIMS/$W.sha256" ]]
+  [[ -f "$ZIMS/$WOLD" ]]
+}
+
+@test "checksum files: a download that passes -c gets its checksum file" {
+  make_local_zim "$WOLD"
+  run_updater -d -c "$ZIMS"
+  assert_success
+  run cat "$ZIMS/$W.sha256"
+  assert_output "$(cut -d' ' -f1 "$(remote_file "$WREMOTE.sha256")") $W"
+}
