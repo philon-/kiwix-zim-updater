@@ -982,6 +982,11 @@ main() {
               # The dry-run keeps the corrupt file: that is a failed verification, like any corrupt ZIM that is kept
               AnyVerifyFailed=1
             fi
+            # With -p the corrupt file stays where it is, so there is nothing to download into its place
+            if [[ $SKIP_PURGE -eq 1 ]]; then
+              echo
+              continue
+            fi
 
             echo
           elif [[ ${#ExpectedHash} -ne 64 ]]; then

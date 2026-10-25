@@ -39,3 +39,26 @@ WREMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   cmp "$ZIMS/$BIG" "$(remote_file "$BIG_REMOTE")"
   [[ ! -e "$ZIMS/.~lock.$BIG" ]]
 }
+
+@test "-f -d -p: a truncated current ZIM is reported and kept, without a download-failed report" {
+  head -c 100 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
+  cp "$ZIMS/$W" "$SANDBOX/orig"
+  run_updater -f -d -p "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'File size verification failed but purge skipped'
+  refute_output --partial 'One or more downloads failed'
+  cmp "$ZIMS/$W" "$SANDBOX/orig"
+  run wget_downloads
+  assert_output ''
+  run download_log
+  refute_line ' !!! DOWNLOAD FAILED !!!'
+}
+
+@test "-f -p dry-run: a truncated current ZIM is reported, nothing is simulated as downloaded" {
+  head -c 100 "$(remote_file "$WREMOTE")" >"$ZIMS/$W"
+  run_updater -f -p "$ZIMS"
+  assert_failure 1
+  assert_output --partial 'Simulated *** File size verification failed but purge skipped'
+  refute_output --partial 'Download (mirror)'
+  refute_output --partial 'Download (direct)'
+}
