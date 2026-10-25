@@ -115,6 +115,15 @@ else
   fail "last-run: $(cat "$TMP/state/last-run" 2>&1)"
 fi
 
+echo "== MIN_FREE_SPACE reaches the script as --min-free"
+out="$("$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" "${offline[@]}" -e RUN_INTERVAL=once -e MIN_FREE_SPACE=1Mi "$IMAGE" 2>&1)"
+status=$?
+if [[ $status -eq 0 ]] && [[ "$out" == *"--min-free 1Mi"* ]]; then
+  pass "--min-free 1Mi accepted"
+else
+  fail "MIN_FREE_SPACE run exit $status"; echo "$out" | tail -20
+fi
+
 echo "== Healthcheck after the run"
 if "$ENGINE" run "${run_opts[@]}" "${container_opts[@]}" -v "$TMP/state:/state:z" --entrypoint healthcheck.sh "$IMAGE"; then
   pass "healthy after exit 0"
