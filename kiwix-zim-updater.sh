@@ -15,8 +15,6 @@ LocalZIMNameArray=()
 LocalZIMRemoteIndexArray=()
 # This array is a boolean array which remembers if a given local zim should be processed in the download loop
 LocalRequiresDownloadArray=()
-# After updating, this array will be used to store hanging locks and to deal with them
-HangingFileLocks=();
 
 # This array stores the file names that kiwix has to offer, with .zim extensions
 RemoteFiles=()
@@ -551,6 +549,64 @@ zim_is_newer() {
   [[ "$year" > "$otherYear" ]] || { [[ "$year" == "$otherYear" ]] && [[ "$month" > "$otherMonth" ]]; }
 }
 
+# cleanup_partials - Report unfinished downloads in the ZIM directory.
+# .part files are never deleted here: those that can no longer be used (release left the catalog, or the finished ZIM
+# already exists) are listed for the user to delete. Files behind a `.~lock.` marker (left by older
+# versions of this script, which downloaded straight into the ZIM's name) are never deleted; only a marker whose file
+# is gone is removed. In dry-run nothing is changed, the would-be actions are listed.
+cleanup_partials() {
+  local partFiles lockFiles part partName lock lockName header=0 simulated=""
+  [[ $DEBUG -eq 1 ]] && simulated="*** Simulated *** "
+  partFiles=("$ZIMPath"*.zim.part)
+  lockFiles=("$ZIMPath".~lock.*.zim)
+  [[ ${#partFiles[@]} -eq 0 ]] && [[ ${#lockFiles[@]} -eq 0 ]] && return 0
+
+  echo -e "${YELLOW_BOLD}5. Cleaning up...${CLEAR}"
+  echo "5. Cleaning up..." >> "$LOG_FILE"
+  echo
+
+  for part in "${partFiles[@]}"; do
+    [[ -f "$part" ]] || continue
+    partName="${part##*/}"
+    partName="${partName%.part}"
+    if [[ " ${ResumableParts[*]} " == *" $part "* ]]; then
+      echo -e "  ${YELLOW_BOLD}Keeping interrupted download for the next run to resume: $part${CLEAR}"
+      echo "Keeping interrupted download for the next run to resume: $part" >> "$LOG_FILE"
+    elif [[ -f "$ZIMPath$partName" ]] || [[ " ${RemoteFiles[*]} " != *" $partName "* ]]; then
+      # Useless: the finished ZIM is already there, or the release left the catalog so it can never be resumed
+      echo -e "  ${YELLOW_BOLD}Unfinished download that can no longer be used: $part (delete it if you no longer need it)${CLEAR}"
+      echo "Unfinished download that can no longer be used: $part" >> "$LOG_FILE"
+    else
+      echo -e "  ${YELLOW_BOLD}Keeping unfinished download for a later run to resume: $part${CLEAR}"
+      echo "Keeping unfinished download for a later run to resume: $part" >> "$LOG_FILE"
+    fi
+    header=1
+  done
+
+  for lock in "${lockFiles[@]}"; do
+    [[ -f "$lock" ]] || continue
+    lockName="${lock##*/}"
+    lockName="${lockName#.~lock.}"
+    if [[ ! -f "$ZIMPath$lockName" ]]; then
+      echo -e "  ${BLUE_BOLD}${simulated}Removing stale lock without a download: $lock${CLEAR}"
+      echo "${simulated}Removing stale lock without a download: $lock" >> "$LOG_FILE"
+      if [[ -f "$ZIMPath$lockName.sha256" ]]; then
+        echo -e "  ${BLUE_BOLD}${simulated}Removing its abandoned checksum: $ZIMPath$lockName.sha256${CLEAR}"
+        echo "${simulated}Removing its abandoned checksum: $ZIMPath$lockName.sha256" >> "$LOG_FILE"
+        [[ $DEBUG -eq 0 ]] && rm -f "$ZIMPath$lockName.sha256"
+      fi
+      [[ $DEBUG -eq 0 ]] && rm -f "$lock"
+    else
+      echo -e "  ${YELLOW_BOLD}Keeping an interrupted download left by an older version of this script: $ZIMPath$lockName${CLEAR}"
+      echo -e "  ${YELLOW_BOLD}  It is resumed when that ZIM is updated again; delete it and $lock if you no longer need it.${CLEAR}"
+      echo "Keeping an interrupted download left by an older version of this script: $ZIMPath$lockName (lock $lock)" >> "$LOG_FILE"
+    fi
+    header=1
+  done
+  [[ $header -eq 1 ]] && echo
+  return 0
+}
+
 # hash_matches <name> <hash> - True if $ZIMPath<name> has the given sha256. Needs no .sha256 file on disk.
 hash_matches() {
   (cd "$ZIMPath" && printf '%s  %s\n' "$2" "$1" | sha256sum --status -c - 2>/dev/null)
@@ -747,10 +803,8 @@ main() {
   AnyDownloadFailed=0
   # Set once -f found a ZIM it could not verify, or a corrupt one it had to keep: the script exits 1
   AnyVerifyFailed=0
-  # Locks of downloads that failed in this run: the cleanup keeps them (and the partial file), so the next run resumes
-  ResumableLocks=()
-  # Locks of downloads that this run found larger than the meta4 size: those files are useless and are cleaned up
-  UnusableLocks=()
+  # .part files of downloads that failed in this run but can be resumed: the cleanup reports them as such
+  ResumableParts=()
 
   for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
     RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
@@ -913,6 +967,10 @@ main() {
       FilePath=$ZIMPath$NewZIM              # Set destination path with file name
       LockFilePath="$ZIMPath.~lock.$NewZIM" # Set destination path with file name
       TorrentFilePath="$ZIMPath$NewZIM.torrent" # Set destination path with file name
+      # Web downloads go into a .part file and only get the ZIM's name once they passed every check, so kiwix-serve
+      # (and this script) never see an unverified file under a .zim name
+      PartPath="$ZIMPath$NewZIM.part"
+      DownloadTarget=""
 
       RequiresDownload=0
 
@@ -937,7 +995,7 @@ main() {
           echo
         else # New ZIM not found, so we'll go ahead and download it.
           RequiresDownload=1
-          if [[ -f $LockFilePath ]]; then
+          if [[ -f $LockFilePath ]] || [[ -f "$PartPath" ]]; then
             [[ $DEBUG -eq 0 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : ZIM download was interrupted. Continuing...${CLEAR}"
             [[ $DEBUG -eq 1 ]] && echo -e "${GREEN_REGULAR}    ✓ Status : *** Simulated ***  ZIM download was interrupted. Continuing...${CLEAR}"
           else
@@ -968,16 +1026,16 @@ main() {
             RequiresDownload=1
             if [[ $DEBUG -eq 0 ]]; then
               if [[ $SKIP_PURGE -eq 0 ]]; then
-                echo -e "${RED_BOLD}    ✗ Status : File size verification failed, removing corrupt file${CLEAR}"
-                echo "✗ Status : File size verification failed, removing corrupt file" >>"$LOG_FILE"
-                rm "$OldZIMPath"
+                # The corrupt file stays until its replacement is verified (it is downloaded into a .part file)
+                echo -e "${RED_BOLD}    ✗ Status : File size verification failed, downloading a replacement${CLEAR}"
+                echo "✗ Status : File size verification failed, downloading a replacement" >>"$LOG_FILE"
               else
                 echo -e "${RED_BOLD}    ✗ Status : File size verification failed but purge skipped${CLEAR}"
                 echo "✗ Status : File size verification failed but purge skipped" >>"$LOG_FILE"
                 AnyVerifyFailed=1
               fi
             else
-              [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** File size verification failed, removing corrupt file ($FilePath)${CLEAR}"
+              [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** File size verification failed, a replacement would be downloaded ($FilePath)${CLEAR}"
               [[ $SKIP_PURGE -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** File size verification failed but purge skipped ($FilePath)${CLEAR}"
               # The dry-run keeps the corrupt file: that is a failed verification, like any corrupt ZIM that is kept
               AnyVerifyFailed=1
@@ -1016,10 +1074,9 @@ main() {
             fi
             if [[ $DEBUG -eq 0 ]]; then
               if [[ $SKIP_PURGE -eq 0 ]]; then
-                echo -e "${RED_BOLD}    ✗ Status : Checksum failed, removing corrupt file${CLEAR}"
-                echo "✗ Status : Checksum failed, removing corrupt file" >>"$LOG_FILE"
-                rm "$OldZIMPath"
-                rm "$OldZIMPath.sha256" 2>/dev/null
+                # The corrupt file stays until its replacement is verified (it is downloaded into a .part file)
+                echo -e "${RED_BOLD}    ✗ Status : Checksum failed, downloading a replacement${CLEAR}"
+                echo "✗ Status : Checksum failed, downloading a replacement" >>"$LOG_FILE"
               else
                 echo -e "${RED_BOLD}    ✗ Status : Checksum failed but purge was skipped${CLEAR}"
                 echo "✗ Status : Checksum failed but purge was skipped" >>"$LOG_FILE"
@@ -1028,7 +1085,7 @@ main() {
                 continue
               fi
             else
-              [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** Checksum failed, removing corrupt file ($FilePath)${CLEAR}"
+              [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** Checksum failed, a replacement would be downloaded ($FilePath)${CLEAR}"
               [[ $SKIP_PURGE -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** Checksum failed but purge was skipped ($FilePath)${CLEAR}"
               # The dry-run keeps the corrupt file: that is a failed verification, like any corrupt ZIM that is kept
               AnyVerifyFailed=1
@@ -1093,32 +1150,54 @@ main() {
           fi
           continue
         else
-          # Before we actually download, let's just check to see that it isn't already in the folder.
-          if [[ -f "$LockFilePath" ]] && [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$FilePath" ]] && \
-            [[ $(stat -c %s "$FilePath") -eq $ExpectedSize ]]; then
+          DownloadTarget="$PartPath"
+          if [[ -f "$LockFilePath" ]]; then
+            # A `.~lock.` marker comes from an older version of this script, which downloaded straight into the ZIM's
+            # name. A lone locked file (no other version of the ZIM) is finished in place as before: moved to .part it
+            # would drop out of the ZIM listing and never be resumed. Next to an older version it becomes a .part file.
+            if [[ -f "$NewZIMPath" ]] && [[ "$OldZIMPath" == "$NewZIMPath" ]]; then
+              DownloadTarget="$NewZIMPath"
+            elif [[ $DEBUG -eq 0 ]]; then
+              if [[ -f "$NewZIMPath" ]] && [[ ! -e "$PartPath" ]]; then
+                mv -f "$NewZIMPath" "$PartPath" && echo "Moved interrupted download $NewZIMPath to $PartPath" >>"$LOG_FILE"
+              fi
+              [[ ! -f "$NewZIMPath" ]] && rm -f "$LockFilePath"
+            fi
+          fi
+          if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$DownloadTarget" ]] && [[ $(stat -c %s "$DownloadTarget") -gt $ExpectedSize ]] && \
+            [[ "$DownloadTarget" == "$PartPath" ]]; then
+            # A partial that is larger than published cannot be resumed: start over
+            echo -e "${YELLOW_REGULAR}    Status : $PartPath is larger than published, starting the download over${CLEAR}"
+            echo "$PartPath is larger than published, starting the download over" >>"$LOG_FILE"
+            [[ $DEBUG -eq 0 ]] && rm -f "$PartPath"
+          fi
+          if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ -f "$DownloadTarget" ]] && [[ $(stat -c %s "$DownloadTarget") -eq $ExpectedSize ]]; then
             # The interrupted download is already complete (e.g. the run was killed while hashing it). Do not ask wget
             # to resume it: Wget2 appends the whole body again when a server ignores the range request. Just verify it.
             echo -e "${GREEN_REGULAR}    ✓ Status : Interrupted download is already complete, verifying it${CLEAR}"
-            echo "Interrupted download is already complete, verifying it : $FilePath" >>"$LOG_FILE"
-          elif [[ -f "$LockFilePath" ]]; then
-            [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
-            [[ $DEBUG -eq 1 ]] && echo "Continue Download : $FilePath" >>"$LOG_FILE"
-          elif [[ -f $FilePath ]]; then # New ZIM already found, we don't need to download it.
-            [[ $DEBUG -eq 1 ]] && echo "Download : New ZIM already exists on disk. Skipping download." >>"$LOG_FILE"
-          else # New ZIM not found, so we'll go ahead and download it.
-            [[ $DEBUG -eq 0 ]] && touch "$LockFilePath"
-            [[ $DEBUG -eq 0 ]] && { download_file "$FilePath" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
-            [[ $DEBUG -eq 1 ]] && echo "Download : $FilePath" >>"$LOG_FILE"
+            echo "Interrupted download is already complete, verifying it : $DownloadTarget" >>"$LOG_FILE"
+          elif [[ -f "$DownloadTarget" ]]; then
+            [[ $DEBUG -eq 0 ]] && { download_file "$DownloadTarget" "$DownloadURL" || DownloadFailed=1; } # Resume
+            [[ $DEBUG -eq 1 ]] && echo "Continue Download : $DownloadTarget" >>"$LOG_FILE"
+          else
+            [[ $DEBUG -eq 0 ]] && { download_file "$DownloadTarget" "$DownloadURL" || DownloadFailed=1; } # Download new ZIM
+            [[ $DEBUG -eq 1 ]] && echo "Download : $DownloadTarget" >>"$LOG_FILE"
           fi
         fi
       fi
+
+      # The file to verify: what this run downloaded (a .part file, or a lone legacy download finished in place), or
+      # the new ZIM that was already on disk
+      CheckPath="$NewZIMPath"
+      [[ -n "$DownloadTarget" ]] && CheckPath="$DownloadTarget"
+      CheckName="${CheckPath##*/}"
 
       [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -eq 1 ]] && echo -e "${RED_BOLD}    ✗ Status : Download failed${CLEAR}" && echo "✗ Status : Download failed" >>"$LOG_FILE"
 
       # Never purge on an unverified file: whatever we downloaded, or are about to replace the old ZIM with, must match
       # the size published in the meta4. The catalog length is rounded to whole KiB, so it is no substitute.
       if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
-        ActualSize=$(stat -c %s "$NewZIMPath" 2>/dev/null)
+        ActualSize=$(stat -c %s "$CheckPath" 2>/dev/null)
         if ! [[ "$ExpectedSize" =~ ^[0-9]+$ ]]; then
           echo -e "${RED_BOLD}    ✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM${CLEAR}"
           echo "✗ Status : Expected size unknown (metadata unavailable), cannot verify $NewZIM" >>"$LOG_FILE"
@@ -1132,7 +1211,7 @@ main() {
 
       # In -f mode a file that was not (re-)downloaded has already been verified above
       if [[ $CALCULATE_CHECKSUM -eq 1 ]] && [[ $DownloadFailed -ne 1 ]] && { [[ $RequiresDownload -eq 1 ]] || [[ $VERIFY_LIBRARY -eq 0 ]]; }; then
-        echo -e "${BLUE_REGULAR}    Calculating checksum for : $NewZIMPath${CLEAR}"
+        echo -e "${BLUE_REGULAR}    Calculating checksum for : $CheckPath${CLEAR}"
         # The size was already verified above for every real download; the checksum is what -c adds
         if ! [[ "$ExpectedHash" =~ ^[0-9a-fA-F]{64}$ ]]; then
           # -c promises a checksum-verified replacement: without a published sha256 the old ZIM must stay
@@ -1145,14 +1224,26 @@ main() {
           fi
         elif [[ $DEBUG -eq 1 ]]; then
           echo -e "${GREEN_BOLD}    ✓ *** Simulated *** Checksum passed${CLEAR}"
-        elif ! hash_matches "$NewZIM" "$ExpectedHash"; then
-          echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt file${CLEAR}"
-          rm "$NewZIMPath"
+        elif ! hash_matches "$CheckName" "$ExpectedHash"; then
+          echo -e "${RED_BOLD}    ✗ Checksum failed, removing corrupt download${CLEAR}"
+          echo "✗ Checksum failed, removing corrupt download $CheckPath" >>"$LOG_FILE"
+          rm -f "$CheckPath"
           DownloadFailed=1
         else
           echo -e "${GREEN_BOLD}    ✓ Checksum passed${CLEAR}"
         fi
         echo
+      fi
+
+      # A verified .part file gets the ZIM's name (in -f mode this atomically replaces the corrupt file)
+      if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && [[ "$CheckPath" == "$PartPath" ]]; then
+        if mv -f "$PartPath" "$NewZIMPath"; then
+          echo "Verified $PartPath, renamed to $NewZIMPath" >>"$LOG_FILE"
+        else
+          echo -e "${RED_BOLD}    ✗ Status : Could not rename $PartPath to $NewZIMPath${CLEAR}"
+          echo "✗ Status : Could not rename $PartPath to $NewZIMPath" >>"$LOG_FILE"
+          DownloadFailed=1
+        fi
       fi
 
       # Only a file that passed every check gets a checksum file
@@ -1161,13 +1252,14 @@ main() {
       echo >> "$LOG_FILE"
       [[ $DownloadFailed -eq 1 ]] && echo " !!! DOWNLOAD FAILED !!!" >>"$LOG_FILE"
       [[ $DownloadFailed -eq 1 ]] && AnyDownloadFailed=1
-      # An interrupted download (not larger than expected) is resumed with wget -c next run, which also just confirms a
-      # file that is already complete. One that failed its checksum is gone; one that is too large cannot be resumed.
-      if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ -f "$LockFilePath" ]] && [[ -f "$NewZIMPath" ]]; then
-        if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$NewZIMPath") -gt $ExpectedSize ]]; then
-          UnusableLocks+=("$LockFilePath")
+      # A failed .part download is resumed with wget -c next run, unless it is larger than published (it cannot be)
+      if [[ $DownloadFailed -eq 1 ]] && [[ $DEBUG -eq 0 ]] && [[ "$CheckPath" == "$PartPath" ]] && [[ -f "$PartPath" ]]; then
+        if [[ "$ExpectedSize" =~ ^[0-9]+$ ]] && [[ $(stat -c %s "$PartPath") -gt $ExpectedSize ]]; then
+          echo -e "${RED_BOLD}    ✗ Removing $PartPath: it is larger than published and cannot be resumed${CLEAR}"
+          echo "✗ Removing $PartPath: it is larger than published and cannot be resumed" >>"$LOG_FILE"
+          rm -f "$PartPath"
         else
-          ResumableLocks+=("$LockFilePath")
+          ResumableParts+=("$PartPath")
         fi
       fi
 
@@ -1180,7 +1272,7 @@ main() {
         continue
       fi
 
-      [[ $RequiresDownload -eq 1 ]] && [[ $DEBUG -eq 0 ]] && rm "$LockFilePath"
+      [[ $RequiresDownload -eq 1 ]] && [[ $DEBUG -eq 0 ]] && rm -f "$LockFilePath"
 
       ########################################
 
@@ -1227,49 +1319,13 @@ main() {
       [[ $DEBUG -eq 1 ]] && echo "End : $(date -u) *** Simulation ***" >>"$LOG_FILE"
     done
 
-    if [[ $DEBUG -eq 0 ]]; then
-      IFS=$'\n' HangingFileLocks=("$ZIMPath".~lock.*.zim)
-      unset IFS
-
-      if [[ ${#HangingFileLocks[@]} -gt 0 ]]; then
-        echo -e "${YELLOW_BOLD}5. Cleaning up...${CLEAR}"
-        echo "5. Cleaning up..." >> "$LOG_FILE"
-        echo
-
-        for ((i = 0; i < ${#HangingFileLocks[@]}; i++)); do
-          baseFileName=$(echo "${HangingFileLocks[$i]}" | grep -ioP "(?<=\.~lock\.).*$")
-          # Only files this run proved useless are deleted. Anything else behind a lock may be a complete ZIM whose
-          # run was killed while hashing it, or a partial another run (other -n/-x, a newer catalog) will resume.
-          if [[ ! -f "$ZIMPath$baseFileName" ]]; then
-            echo -e "  ${BLUE_BOLD}Removing stale lock without a download: ${HangingFileLocks[$i]}${CLEAR}"
-            echo "Removing stale lock without a download: ${HangingFileLocks[$i]}" >> "$LOG_FILE"
-            if [[ -f "$ZIMPath$baseFileName.sha256" ]]; then
-              echo -e "  ${BLUE_BOLD}Found abandoned checksum: $ZIMPath$baseFileName.sha256${CLEAR}"
-              echo "Found abandoned checksum: $ZIMPath$baseFileName.sha256" >> "$LOG_FILE"
-              rm -f "$ZIMPath$baseFileName.sha256"
-            fi
-            rm -f "${HangingFileLocks[$i]}"
-          elif [[ " ${UnusableLocks[*]} " == *" ${HangingFileLocks[$i]} "* ]]; then
-            echo -e "  ${RED_BOLD}Removing download that is larger than published, it cannot be resumed: $ZIMPath$baseFileName${CLEAR}"
-            echo "Removing download that is larger than published, it cannot be resumed: $ZIMPath$baseFileName" >> "$LOG_FILE"
-            rm -f "$ZIMPath$baseFileName" "$ZIMPath$baseFileName.sha256" "${HangingFileLocks[$i]}"
-          elif [[ " ${ResumableLocks[*]} " == *" ${HangingFileLocks[$i]} "* ]]; then
-            echo -e "  ${YELLOW_BOLD}Keeping interrupted download for the next run to resume: $ZIMPath$baseFileName${CLEAR}"
-            echo "Keeping interrupted download for the next run to resume: $ZIMPath$baseFileName" >> "$LOG_FILE"
-          else
-            echo -e "  ${YELLOW_BOLD}Keeping an interrupted download left by an earlier run: $ZIMPath$baseFileName${CLEAR}"
-            echo -e "  ${YELLOW_BOLD}  It is resumed when that ZIM is updated again; delete it and ${HangingFileLocks[$i]} if you no longer need it.${CLEAR}"
-            echo "Keeping an interrupted download left by an earlier run: $ZIMPath$baseFileName (lock ${HangingFileLocks[$i]})" >> "$LOG_FILE"
-          fi
-          echo
-        done
-      fi
-    fi
   else
     echo -e "${GREEN_REGULAR}    ✓ Download: Nothing to download.${CLEAR}"
     echo "✓ Download: Nothing to download." >> "$LOG_FILE"
     echo
   fi
+
+  cleanup_partials
 
   if [[ $AnyDownloadFailed -eq 1 ]]; then
     echo -e "${RED_BOLD}✗ One or more downloads failed, see $LOG_FILE${CLEAR}"

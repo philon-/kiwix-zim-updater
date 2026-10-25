@@ -122,7 +122,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   make_local_zim "$NEW_WP" --from-remote "$WP_REMOTE"
   printf 'X' | dd of="$ZIMS/$NEW_WP" bs=1 seek=10 conv=notrunc status=none
   run_updater -f -d -S "$ZIMS"
-  assert_output --partial 'Checksum failed, removing corrupt file'
+  assert_output --partial 'Checksum failed, downloading a replacement'
   cmp "$ZIMS/$NEW_WP" "$(remote_file "$WP_REMOTE")"
   run find "$ZIMS" -name '*.sha256*'
   assert_output ''

@@ -199,14 +199,16 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   assert_output --partial 'Checksum passed'
 }
 
-@test "N7a: a failed download keeps its partial file and lock so the next run resumes it" {
+@test "N7a: a failed download keeps its partial .part file so the next run resumes it" {
   make_local_zim "$OLD_WP"
   export FAKE_WGET_FAIL=wikipedia_en_test_2026-01
   run_updater -d "$ZIMS"
   assert_failure 1
-  [[ -f "$ZIMS/.~lock.$NEW_WP" ]]
-  [[ -s "$ZIMS/$NEW_WP" ]]
+  [[ -s "$ZIMS/$NEW_WP.part" ]]
+  [[ ! -e "$ZIMS/$NEW_WP" ]]
+  [[ ! -e "$ZIMS/.~lock.$NEW_WP" ]]
   [[ -f "$ZIMS/$OLD_WP" ]]
+  assert_output --partial "Keeping interrupted download for the next run to resume: $ZIMS/$NEW_WP.part"
 }
 
 @test "N7a: the next run resumes the interrupted download and completes the update" {

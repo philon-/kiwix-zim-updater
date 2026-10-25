@@ -29,7 +29,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -f "$ZIMS"
   # The corrupt file stays (dry-run), so the verification failed: exit 1 (R7)
   assert_failure 1
-  assert_output --partial '*** Simulated *** Checksum failed, removing corrupt file'
+  assert_output --partial '*** Simulated *** Checksum failed, a replacement would be downloaded'
   [[ -f "$ZIMS/$CUR_WP" ]]
   run wget_downloads
   assert_output ''
@@ -40,7 +40,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater -f "$ZIMS"
   # The truncated file stays (dry-run), so the verification failed: exit 1 (R7)
   assert_failure 1
-  assert_output --partial '*** Simulated *** File size verification failed, removing corrupt file'
+  assert_output --partial '*** Simulated *** File size verification failed, a replacement would be downloaded'
   [[ -f "$ZIMS/$CUR_WP" ]]
 }
 

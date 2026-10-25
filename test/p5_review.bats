@@ -69,8 +69,10 @@ keep_copy() {
   touch "$ZIMS/.~lock.$W"
   FAKE_WGET_NETFAIL="$W" run_updater -d "$ZIMS"
   assert_failure 1
-  [[ -s "$ZIMS/$W" ]]
-  [[ -f "$ZIMS/.~lock.$W" ]]
+  # The old-style locked partial next to an older version becomes a .part file and is kept for resuming
+  [[ -s "$ZIMS/$W.part" ]]
+  [[ ! -e "$ZIMS/$W" ]]
+  [[ ! -e "$ZIMS/.~lock.$W" ]]
   cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
 }
 
@@ -81,7 +83,7 @@ keep_copy() {
   run_updater -d -p "$ZIMS"
   cmp "$ZIMS/$WOLD" "$SANDBOX/$WOLD.orig"
   cmp "$ZIMS/$W" "$(remote_file "$WREMOTE")"
-  assert_output --partial 'Keeping an interrupted download left by an earlier run'
+  assert_output --partial 'Keeping an interrupted download left by an older version of this script'
 }
 
 @test "R1: without -p, a verified update still purges an old ZIM with a stale lock and removes the lock" {

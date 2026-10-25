@@ -19,6 +19,8 @@ The repository is a private fork of the upstream https://github.com/jojo2357/kiw
 | `test/stubs.bats` | Self-tests for the stubs and the fixtures. |
 | `test/p2_cli.bats`, `test/p2_ops.bats`, `test/p2_hygiene.bats` | Phase 2: exit codes and argument validation, dependency check, locking and index caching, global initialisation, ZIM listing and `-S`. |
 | `test/p3_*.bats` | Phase 3: structure (`main()` and the source guard), the legacy-name removal and the opt-in self-update. |
+| `test/p5_review.bats` | Regression tests for the independent reviews' findings. |
+| `test/p6_followups.bats`, `test/p7_partials.bats` | Follow-ups: size limits on resumes, checksum-file timing, `.part` staging and the cleanup of unfinished downloads. |
 | `test/unit.bats` | Unit tests. They `source` the script and call its functions directly. |
 | `test/helpers/common.bash` | Shared setup. It creates a sandbox, copies the script there and prepends the stub `PATH`. |
 | `test/helpers/bin/` | Stubs for `wget`, `clear` and `git`, so tests never touch the network or the real repository. |
@@ -39,7 +41,7 @@ make lint test
 1. **Never run the script outside the test sandbox.** That rules out real ZIM directories, `-d`/`--disable-dry-run` and the repository working tree as the current directory. The script writes `download.log` and `kiwix-index` into the current directory. Self-update now only runs with `-U`/`--self-update`, but with `-U` it runs `git fetch` and `git pull` on the clone it lives in, so never pass `-U` outside the sandbox either. Tests that exercise `-U` must use throwaway repositories inside the sandbox and must never read or change the user's global or system git config: set `HOME` and `GIT_CONFIG_GLOBAL` to paths inside the sandbox and `GIT_CONFIG_NOSYSTEM=1`, and never run `git config --global`.
 2. **Never contact kiwix.org from tests.** All network access goes through the `wget` stub in `test/helpers/bin/`. The one exception is a manual, read-only, dry-run check that a human explicitly asks for.
 3. **Dry-run is sacred.** While `DEBUG=1` (the default, i.e. no `-d`), nothing inside the ZIM directory may be created, modified or deleted. That includes `.sha256` files, lock files and torrents. Writing `download.log` and `kiwix-index` in the current directory is allowed.
-4. **No unverified deletes.** Every code path that runs `rm` on a ZIM must be preceded by either:
+4. **No unverified files under a ZIM's name, and no unverified deletes.** Downloads go into `<name>.zim.part` and are renamed only after every check passed; never download straight into a `.zim` name. The only exception is finishing a lone `.~lock.`-marked download left by an older version, in place, because moving it would drop it out of the ZIM listing. Every code path that runs `rm` on a ZIM must be preceded by either:
    - a replacement whose download succeeded and whose size was verified, plus its checksum when `-c` is set; or
    - an explicit user flag that requests the deletion.
 

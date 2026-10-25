@@ -51,7 +51,8 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   run find "$ZIMS" -name '.~lock.*'
   assert_output ''
   run wget_downloads
-  assert_output "-q --show-progress --progress=bar:force -c -O $ZIMS/$NEW_WP https://mirror.kiwix.test/zim/wikipedia/wikipedia_en_test_2026-01.zim"
+  # Downloads are staged in a .part file and renamed once verified
+  assert_output "-q --show-progress --progress=bar:force -c -O $ZIMS/$NEW_WP.part https://mirror.kiwix.test/zim/wikipedia/wikipedia_en_test_2026-01.zim"
 }
 
 @test "download: -d updates several ZIMs in one run" {
@@ -77,7 +78,7 @@ WP_REMOTE=zim/wikipedia/wikipedia_en_test_2026-01.zim
   make_local_zim "$OLD_WP"
   export FAKE_WGET_CORRUPT=wikipedia_en_test_2026-01
   run_updater -d -c "$ZIMS"
-  assert_output --partial 'Checksum failed, removing corrupt file'
+  assert_output --partial 'Checksum failed, removing corrupt download'
   [[ -f "$ZIMS/$OLD_WP" ]]
   [[ ! -e "$ZIMS/$NEW_WP" ]]
   [[ ! -e "$ZIMS/$NEW_WP.sha256" ]]
