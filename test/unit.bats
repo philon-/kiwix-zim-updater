@@ -275,7 +275,7 @@ assert_fixture_arrays() {
   assert_output --partial 'Missing required tool(s): numfmt. Exiting...'
 }
 
-@test "N9: zim_date reads the date of a ZIM with an upper-case extension" {
+@test "zim_date: reads the date of a ZIM with an upper-case extension (N9)" {
   source "$SCRIPT_COPY"
   run zim_date wikipedia_en_test_2026-01.ZIM
   assert_output '2026-01'
@@ -283,7 +283,7 @@ assert_fixture_arrays() {
   assert_output '2026-02a'
 }
 
-@test "write_checksum_file leaves an existing file with the same hash untouched" {
+@test "write_checksum_file: leaves an existing file with the same hash untouched" {
   source "$SCRIPT_COPY"
   ZIMPath="$ZIMS/"
   DEBUG=0
@@ -292,4 +292,24 @@ assert_fixture_arrays() {
   cp "$ZIMS/a_2026-01.zim.sha256" "$SANDBOX/orig"
   write_checksum_file a_2026-01.zim "$(cut -d' ' -f1 "$SANDBOX/orig")"
   cmp "$ZIMS/a_2026-01.zim.sha256" "$SANDBOX/orig"
+}
+
+###############################################################################
+# Sourcing: the source guard keeps main from running, and nothing else runs at top level
+
+@test "sourcing the script defines main and the helpers without running anything" {
+  local before
+  before="$(cd "$SANDBOX" && find . -printf '%P\n' | LC_ALL=C sort)"
+  run bash -c 'source "$1" && declare -F main master_scrape validate_zim_dir list_local_zims match_to_catalog self_update usage_example hash_matches write_checksum_file >/dev/null && echo sourced-ok' _ "$SCRIPT_COPY"
+  assert_success
+  assert_output 'sourced-ok'
+  assert_equal "$(cd "$SANDBOX" && find . -printf '%P\n' | LC_ALL=C sort)" "$before"
+  refute_nonempty "$FAKE_WGET_LOG"
+  refute_nonempty "$FAKE_GIT_LOG"
+}
+
+@test "sourcing does not change the caller's shell options" {
+  run bash -c 'shopt -u nullglob; source "$1"; shopt -q nullglob && echo on || echo off' _ "$SCRIPT_COPY"
+  assert_success
+  assert_output 'off'
 }
