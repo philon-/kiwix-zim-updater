@@ -1,0 +1,30 @@
+# Test and lint entry points. See AGENTS.md.
+
+BATS ?= test/libs/bats-core/bin/bats
+SHELLCHECK_SEVERITY ?= error
+SHELLCHECK_IMAGE ?= docker.io/koalaman/shellcheck:v0.10.0
+
+# Use a local shellcheck when available, otherwise a pinned container image.
+ifeq ($(shell command -v shellcheck 2>/dev/null),)
+SHELLCHECK ?= podman run --rm -v "$(CURDIR):/mnt:Z" -w /mnt $(SHELLCHECK_IMAGE)
+else
+SHELLCHECK ?= shellcheck
+endif
+
+# Files checked at SHELLCHECK_SEVERITY (the script) and at the default
+# severity (everything written for the test harness).
+SCRIPT := kiwix-zim-updater.sh
+HARNESS_SCRIPTS := $(wildcard test/helpers/bin/*) $(wildcard test/fixtures/build.sh)
+HARNESS_LIBS := $(wildcard test/helpers/*.bash)
+
+.PHONY: all test lint
+
+all: lint test
+
+test:
+	$(BATS) test/
+
+lint:
+	$(SHELLCHECK) --severity=$(SHELLCHECK_SEVERITY) $(SCRIPT)
+	$(if $(strip $(HARNESS_SCRIPTS)),$(SHELLCHECK) $(HARNESS_SCRIPTS))
+	$(if $(strip $(HARNESS_LIBS)),$(SHELLCHECK) -s bash $(HARNESS_LIBS))
