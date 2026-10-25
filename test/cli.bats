@@ -88,7 +88,7 @@ setup() {
   sed -i 's#</feed>#  <entry>\n    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/rootlevel_test_2026-01.zim.meta4" length="1024" />\n  </entry>\n</feed>#' "$FAKE_FIXTURES/catalog.xml"
   make_local_zim wikipedia_en_test_2026-01.zim --from-remote zim/wikipedia/wikipedia_en_test_2026-01.zim
   run_updater "$ZIMS"
-  assert_failure 99
+  assert_failure 1
   assert_output --partial 'CRITICAL ERROR!'
   assert_output --partial 'Parsed array lengths did not match. Aborting to prevent data loss'
 }

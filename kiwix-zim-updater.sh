@@ -168,14 +168,13 @@ master_scrape() {
     echo "✓ Found ${#RemoteFiles[@]} files online" >> "$LOG_FILE"
   fi
 
-  if [[ ${#RemoteFiles[@]} -ne ${#RemoteFiles[@]} ]] || \
-    [[ ${#RemoteFiles[@]} -ne ${#Basenames[@]} ]] || \
+  if [[ ${#RemoteFiles[@]} -ne ${#Basenames[@]} ]] || \
     [[ ${#RemoteFiles[@]} -ne ${#RemotePaths[@]} ]] || \
     [[ ${#RemoteFiles[@]} -ne ${#RemoteCategory[@]} ]] || \
     [[ ${#RemoteFiles[@]} -ne ${#FileSizes[@]} ]] ; then
     echo -e "${RED_BOLD}CRITICAL ERROR!${CLEAR}"
-    echo -e "${RED}Parsed array lengths did not match. Aborting to prevent data loss${CLEAR}"
-    exit 99
+    echo -e "${RED_REGULAR}Parsed array lengths did not match. Aborting to prevent data loss${CLEAR}"
+    exit 1
   fi
 
   # Housekeeping...

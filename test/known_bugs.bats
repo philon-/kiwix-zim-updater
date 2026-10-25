@@ -308,7 +308,6 @@ EOF
 }
 
 @test "M3: the array-length mismatch message is printed in red" {
-  skip "M3: \${RED} is undefined, so the message has no colour"
   use_fixture_copy
   sed -i 's#</feed>#  <entry>\n    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/rootlevel_test_2026-01.zim.meta4" length="1024" />\n  </entry>\n</feed>#' "$FAKE_FIXTURES/catalog.xml"
   make_local_zim "$OLD_WP"
