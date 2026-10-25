@@ -106,6 +106,17 @@ setup() {
   assert_output --partial 'Nothing to download.'
 }
 
+@test "ZIMs without a date in their name do not shadow each other" {
+  make_local_zim my_own.zim
+  make_local_zim other_custom.zim
+  run_updater "$ZIMS"
+  assert_success
+  assert_output --partial 'my_own.zim  No online match found.'
+  assert_output --partial 'other_custom.zim  No online match found.'
+  run download_log
+  refute_output --partial 'Disregarding'
+}
+
 @test "non-.zim files in the ZIM directory are ignored" {
   make_local_zim "$WP_OLD"
   printf 'x' >"$ZIMS/notes.txt"

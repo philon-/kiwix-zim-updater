@@ -441,7 +441,8 @@ list_local_zims() {
       fi
       scanBasename="${titles[$scanIndex]}"
 
-      if [[ "$myBasename" == "$scanBasename" ]]; then
+      # A ZIM without a date has no title, and nothing to be shadowed by
+      if [[ -n "$myBasename" ]] && [[ "$myBasename" == "$scanBasename" ]]; then
         if [[ -f "${ZIMPath}.~lock.${LocalZIMArray[$index]}" ]]; then
           echo "Disregarding ${LocalZIMArray[$index]} because it was interrupted by ${LocalZIMArray[$scanIndex]}" >> "$LOG_FILE"
         elif [[ -f "${ZIMPath}${LocalZIMArray[$index]}.torrent" ]]; then
