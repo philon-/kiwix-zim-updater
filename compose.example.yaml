@@ -70,7 +70,7 @@ services:
       # would go below it is skipped and the old ZIM kept, e.g. 50G. Default: empty, the updater's own default (1Gi).
       MIN_FREE_SPACE: ""
 
-      # Keep a kiwix library file listing the verified ZIMs up to date (--library), for kiwix-serve
+      # Keep a kiwix library file listing the finished ZIMs up to date (--library), for kiwix-serve
       # --library --monitorLibrary (see the kiwix-serve service below), which then picks up updated ZIMs by itself,
       # without a restart. Keep it in the ZIM directory: its paths are relative to it. Empty: no library file.
       LIBRARY_XML: "/data/library.xml"

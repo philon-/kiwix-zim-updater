@@ -51,7 +51,7 @@ kiwix-zim-updater.sh -d -c --library /srv/kiwix/zims/library.xml /srv/kiwix/zims
 kiwix-serve --library --monitorLibrary /srv/kiwix/zims/library.xml
 ```
 
-Only verified ZIMs are listed, and a new version is listed before the old one is removed. Keep the library in the ZIM directory (its paths are relative to it), and don't let other tools replace the file: kiwix-serve 3.8 stops watching a library file that was replaced by a rename. Needs `kiwix-manage` from kiwix-tools. Tested with kiwix-tools 3.7.0 (Debian 13) and the official `ghcr.io/kiwix/kiwix-serve` image (3.8.2).
+The library lists the finished ZIMs in the directory: a new download only appears once it is verified, and before the old version is removed, while unfinished `.part` files never do. ZIMs that were already there are listed as they are, without a fresh integrity check; run `-f` to verify those. Keep the library in the ZIM directory (its paths are relative to it), and don't let other tools replace the file: kiwix-serve 3.8 stops watching a library file that was replaced by a rename. Needs `kiwix-manage` from kiwix-tools. Tested with kiwix-tools 3.7.0 (Debian 13) and the official `ghcr.io/kiwix/kiwix-serve` image (3.8.2).
 
 ## Running with Docker
 
@@ -89,7 +89,7 @@ Universal Options:
                                Specify units include M Mi G Gi, etc. See `man numfmt`
     --min-free <size>          Free space to keep in the ZIM directory after a download (default 1Gi, 0 disables).
                                A download that would leave less is skipped and the old ZIM kept.
-    --library <file>           Keeps a kiwix library XML file listing the verified ZIMs up to date, for
+    --library <file>           Keeps a kiwix library XML file listing the finished ZIMs up to date, for
                                kiwix-serve --library --monitorLibrary. Best placed in the ZIM directory.
     -S, --no-sha               Disables saving the zim checksum for future reference. Does not delete present checksums.
                                

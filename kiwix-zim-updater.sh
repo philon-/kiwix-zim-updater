@@ -40,7 +40,7 @@ ForcedDryRun=0
 MIN_SIZE=0
 MAX_SIZE=0
 MIN_FREE=1073741824 # --min-free: bytes to keep free in the ZIM directory after a download (1 GiB; 0 disables)
-LIBRARY_XML="" # --library: kiwix library XML file to keep in sync with the verified ZIMs (for kiwix-serve --monitorLibrary)
+LIBRARY_XML="" # --library: kiwix library XML file to keep in sync with the ZIMs (for kiwix-serve --monitorLibrary)
 LibraryFailed=0 # set when the library could not be rebuilt; the run then exits 1
 CALCULATE_CHECKSUM=0
 CHECKSUM_FILES=1
@@ -330,7 +330,7 @@ usage_example() {
   echo '                               Specify units include M Mi G Gi, etc. See `man numfmt`'
   echo '    --min-free <size>          Free space to keep in the ZIM directory after a download (default 1Gi, 0 disables).'
   echo '                               A download that would leave less is skipped and the old ZIM kept.'
-  echo '    --library <file>           Keeps a kiwix library XML file listing the verified ZIMs up to date, for'
+  echo '    --library <file>           Keeps a kiwix library XML file listing the finished ZIMs up to date, for'
   echo '                               kiwix-serve --library --monitorLibrary. Best placed in the ZIM directory.'
   echo '    -S, --no-sha               Disables saving the zim checksum for future reference. Does not delete present checksums.'
   echo '                               '
@@ -646,9 +646,10 @@ other_local_version_exists() {
   return 1
 }
 
-# rebuild_library - Bring the --library file in line with the ZIMs in the ZIM directory. Only verified ZIMs are listed:
-# .part files never match, and a .zim behind an old-style `.~lock.` marker is an unfinished download. Nothing happens in
-# dry-run or without --library. kiwix-serve --monitorLibrary picks up the change by itself.
+# rebuild_library - Bring the --library file in line with the finished ZIMs in the ZIM directory. It lists what is there:
+# a download only becomes a .zim (and so a candidate) once verified, .part files never match, and a .zim behind an
+# old-style `.~lock.` marker is an unfinished download. Existing ZIMs are not verified here; that is what -f is for.
+# Nothing happens in dry-run or without --library. kiwix-serve --monitorLibrary picks up the change by itself.
 # - The new library is built in a temporary file, one ZIM at a time (kiwix-manage gives up on all of them when one
 #   cannot be read); unreadable ZIMs are reported and left out.
 # - It is written into the existing file in place, and only when it changed: kiwix-serve 3.8 stops noticing changes
@@ -1497,7 +1498,7 @@ main() {
   fi
 
   cleanup_partials
-  # Anything else that changed the set of verified ZIMs (e.g. an old-style lock that was resolved)
+  # Anything else that changed the set of finished ZIMs (e.g. an old-style lock that was resolved)
   rebuild_library
 
   if [[ $LibraryFailed -eq 1 ]]; then
