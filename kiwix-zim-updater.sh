@@ -40,6 +40,8 @@ ForcedDryRun=0
 MIN_SIZE=0
 MAX_SIZE=0
 MIN_FREE=1073741824 # --min-free: bytes to keep free in the ZIM directory after a download (1 GiB; 0 disables)
+LIBRARY_XML="" # --library: kiwix library XML file to keep in sync with the verified ZIMs (for kiwix-serve --monitorLibrary)
+LibraryFailed=0 # set when the library could not be rebuilt; the run then exits 1
 CALCULATE_CHECKSUM=0
 CHECKSUM_FILES=1
 VERIFY_LIBRARY=0
@@ -328,6 +330,8 @@ usage_example() {
   echo '                               Specify units include M Mi G Gi, etc. See `man numfmt`'
   echo '    --min-free <size>          Free space to keep in the ZIM directory after a download (default 1Gi, 0 disables).'
   echo '                               A download that would leave less is skipped and the old ZIM kept.'
+  echo '    --library <file>           Keeps a kiwix library XML file listing the verified ZIMs up to date, for'
+  echo '                               kiwix-serve --library --monitorLibrary. Best placed in the ZIM directory.'
   echo '    -S, --no-sha               Disables saving the zim checksum for future reference. Does not delete present checksums.'
   echo '                               '
   echo 'Action Method Options:'
@@ -512,6 +516,11 @@ check_dependencies() {
   done
   # The parsing relies on Perl-compatible regular expressions, which not every grep has
   echo x | grep -qP 'x' 2>/dev/null || missing+=("grep -P")
+  # kiwix-manage (kiwix-tools) is only needed to maintain a library file
+  if [[ -n "$LIBRARY_XML" ]]; then
+    command -v kiwix-manage >/dev/null 2>&1 || missing+=("kiwix-manage")
+    command -v cmp >/dev/null 2>&1 || missing+=("cmp")
+  fi
   # git is only needed when the self-update would actually run
   if [[ $SELF_UPDATE -eq 1 ]] && [[ -e "$SCRIPTPATH/.git" ]]; then
     command -v git >/dev/null 2>&1 || missing+=("git")
@@ -637,6 +646,68 @@ other_local_version_exists() {
   return 1
 }
 
+# rebuild_library - Bring the --library file in line with the ZIMs in the ZIM directory. Only verified ZIMs are listed:
+# .part files never match, and a .zim behind an old-style `.~lock.` marker is an unfinished download. Nothing happens in
+# dry-run or without --library. kiwix-serve --monitorLibrary picks up the change by itself.
+# - The new library is built in a temporary file, one ZIM at a time (kiwix-manage gives up on all of them when one
+#   cannot be read); unreadable ZIMs are reported and left out.
+# - It is written into the existing file in place, and only when it changed: kiwix-serve 3.8 stops noticing changes
+#   once the file is replaced by a rename. A half-written file is harmless (kiwix-serve keeps the books it has when a
+#   reload fails), and a touch two seconds later makes it reload the finished file in any case.
+# - If no ZIM could be added although there are some, the existing library is left alone.
+rebuild_library() {
+  [[ -n "$LIBRARY_XML" ]] || return 0
+  [[ $DEBUG -eq 0 ]] || return 0
+  local tmp="$LIBRARY_XML.tmp.$$" zim name added=0 failed=0
+  rm -f "$tmp"
+  for zim in "$ZIMPath"*.[zZ][iI][mM]; do
+    [[ -f "$zim" ]] || continue
+    name="${zim##*/}"
+    [[ "$name" == .* ]] && continue
+    [[ -f "$ZIMPath.~lock.$name" ]] && continue
+    if kiwix-manage "$tmp" add "$zim" >/dev/null 2>&1; then
+      added=$((added + 1))
+    else
+      failed=$((failed + 1))
+      echo -e "${YELLOW_BOLD}    Library: $name could not be read by kiwix-manage and is left out of $LIBRARY_XML${CLEAR}"
+      echo "Library: $name could not be read by kiwix-manage and is left out of $LIBRARY_XML" >>"$LOG_FILE"
+    fi
+  done
+  if [[ $added -eq 0 ]]; then
+    if [[ $failed -gt 0 ]]; then
+      echo -e "${RED_BOLD}    ✗ Library: no ZIM could be added, $LIBRARY_XML is left as it is${CLEAR}"
+      echo "✗ Library: no ZIM could be added, $LIBRARY_XML is left as it is" >>"$LOG_FILE"
+      rm -f "$tmp"
+      LibraryFailed=1
+      return 1
+    fi
+    printf '<library version="20110515">\n</library>\n' >"$tmp" 2>/dev/null
+  fi
+  if [[ ! -f "$tmp" ]]; then
+    echo -e "${RED_BOLD}    ✗ Library: could not write $tmp${CLEAR}"
+    echo "✗ Library: could not write $tmp" >>"$LOG_FILE"
+    LibraryFailed=1
+    return 1
+  fi
+  if [[ -f "$LIBRARY_XML" ]] && cmp -s "$tmp" "$LIBRARY_XML"; then
+    rm -f "$tmp"
+    return 0
+  fi
+  if cat "$tmp" >"$LIBRARY_XML"; then
+    rm -f "$tmp"
+    echo -e "${GREEN_REGULAR}    ✓ Library: $LIBRARY_XML now lists $added ZIM(s)${CLEAR}"
+    echo "✓ Library: $LIBRARY_XML now lists $added ZIM(s)" >>"$LOG_FILE"
+    # The second change event, in its own process; it must not hold the ZIM directory lock (fd 9) after the run
+    (exec 9<&-; sleep 2; touch "$LIBRARY_XML" 2>/dev/null) >/dev/null 2>&1 &
+    return 0
+  fi
+  rm -f "$tmp"
+  echo -e "${RED_BOLD}    ✗ Library: could not write $LIBRARY_XML${CLEAR}"
+  echo "✗ Library: could not write $LIBRARY_XML" >>"$LOG_FILE"
+  LibraryFailed=1
+  return 1
+}
+
 # free_bytes <dir> - Print the bytes available to this user in the file system holding <dir> (empty if unknown)
 free_bytes() {
   df -B1 --output=avail -- "$1" 2>/dev/null | tail -n 1 | tr -d ' '
@@ -725,6 +796,13 @@ main() {
         MIN_SIZE=$(numfmt --from=auto "$1" 2>/dev/null) # convert passed arg to bytes
         [[ "$MIN_SIZE" =~ ^[0-9]+$ ]] || usage_error "Invalid minimum size: '$1'"
         shift                               # discard value
+        ;;
+      --library)
+        { [[ $# -lt 2 ]] || [[ -z "$2" ]] || [[ "$2" == -* ]]; } && usage_error "$1 requires a file name"
+        shift
+        LIBRARY_XML="$1"
+        [[ "$LIBRARY_XML" == /* ]] || LIBRARY_XML="$PWD/$LIBRARY_XML"
+        shift
         ;;
       --min-free)
         [[ $# -lt 2 ]] && usage_error "$1 requires a size"
@@ -838,6 +916,9 @@ main() {
 
   # Second, Flag Check.
   flags "$@"
+
+  # Pick up ZIMs added or removed by hand since the last run (writes only when something changed)
+  rebuild_library
 
   echo
   echo -e "${YELLOW_BOLD}3. Processing ZIM(s)...${CLEAR}"
@@ -1322,6 +1403,8 @@ main() {
       if [[ $DEBUG -eq 0 ]] && [[ $DownloadFailed -ne 1 ]] && [[ "$CheckPath" == "$PartPath" ]]; then
         if mv -f "$PartPath" "$NewZIMPath"; then
           echo "Verified $PartPath, renamed to $NewZIMPath" >>"$LOG_FILE"
+          # List the new ZIM before the old one is purged, so kiwix-serve never lacks this title
+          rebuild_library
         else
           echo -e "${RED_BOLD}    ✗ Status : Could not rename $PartPath to $NewZIMPath${CLEAR}"
           echo "✗ Status : Could not rename $PartPath to $NewZIMPath" >>"$LOG_FILE"
@@ -1374,6 +1457,7 @@ main() {
             echo -e "${GREEN_BOLD}    ✓ Status : New ZIM downloaded successfully. Old ZIM purged.${CLEAR}"
             echo "✓ Status : New ZIM downloaded successfully. Old ZIM purged." >>"$LOG_FILE"
             [[ -f "$OldZIMPath" ]] && rm "$OldZIMPath" && rm "$OldZIMPath.sha256" 2>/dev/null # Purge old ZIM
+            rebuild_library
           fi
         else
           echo -e "${GREEN_BOLD}    ✓ Status : *** Simulated ***${CLEAR}"
@@ -1409,7 +1493,13 @@ main() {
   fi
 
   cleanup_partials
+  # Anything else that changed the set of verified ZIMs (e.g. an old-style lock that was resolved)
+  rebuild_library
 
+  if [[ $LibraryFailed -eq 1 ]]; then
+    echo -e "${RED_BOLD}✗ The library file $LIBRARY_XML could not be fully updated, see $LOG_FILE${CLEAR}"
+    echo "✗ The library file $LIBRARY_XML could not be fully updated" >> "$LOG_FILE"
+  fi
   if [[ $AnyDownloadFailed -eq 1 ]]; then
     echo -e "${RED_BOLD}✗ One or more downloads failed, see $LOG_FILE${CLEAR}"
     echo "✗ One or more downloads failed" >> "$LOG_FILE"
@@ -1425,6 +1515,7 @@ main() {
     echo "✗ One or more ZIMs could not be verified or failed verification and were kept" >> "$LOG_FILE"
     exit 1
   fi
+  [[ $LibraryFailed -eq 1 ]] && exit 1
   exit 0
 }
 

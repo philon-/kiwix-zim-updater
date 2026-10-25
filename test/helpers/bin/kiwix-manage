@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Test stub for kiwix-manage (kiwix-tools). Supports `kiwix-manage LIBRARY add ZIM`, the only form the script uses,
+# and writes a library in the real format: one <book> per ZIM, its path relative to the library's directory.
+# A ZIM whose content starts with "BADZIM" cannot be read: like the real tool, the call then fails and writes nothing.
+# Every call is logged to $FAKE_KIWIX_MANAGE_LOG.
+if [[ -n "${FAKE_KIWIX_MANAGE_LOG:-}" ]]; then
+  printf '%s\n' "$*" >>"$FAKE_KIWIX_MANAGE_LOG"
+fi
+if [[ $# -ne 3 ]] || [[ "$2" != "add" ]]; then
+  echo "kiwix-manage stub: only 'LIBRARY add ZIM' is supported" >&2
+  exit 2
+fi
+lib="$1" zim="$3"
+if [[ ! -f "$zim" ]] || [[ "$(head -c 6 "$zim")" == "BADZIM" ]]; then
+  echo "Cannot add zim $zim to the library."
+  exit 1
+fi
+libdir="$(cd "$(dirname "$lib")" && pwd)" || exit 1
+zimabs="$(cd "$(dirname "$zim")" && pwd)/$(basename "$zim")"
+rel="$(realpath --relative-to="$libdir" "$zimabs")"
+id="$(printf '%s' "$rel" | sha1sum | cut -c1-32)"
+book="  <book id=\"$id\" path=\"$rel\" title=\"${rel##*/}\" />"
+if [[ -f "$lib" ]]; then
+  sed -i '$d' "$lib"
+else
+  echo '<library version="20110515">' >"$lib"
+fi
+printf '%s\n</library>\n' "$book" >>"$lib"

@@ -103,6 +103,25 @@ Here `download.log` and `kiwix-index` end up in `/var/lib/kiwix`. Exit code 75 o
 
 For unattended use, consider adding `-c`: without it, a replacement is verified by its size only before the old ZIM is purged; with it, also by its sha256. If the disk holding the ZIMs is shared with other services, raise `--min-free` so updates always leave them room. During an internet outage every run simply exits 1 and changes nothing, so it is safe to keep the cron job running.
 
+## Keeping kiwix-serve up to date
+
+kiwix-serve started with a list of ZIM files keeps serving the files it opened at start-up: after an update it goes on serving the replaced file until it is restarted. Instead, let the updater maintain a library file and let kiwix-serve watch it:
+
+```shell
+kiwix-zim-updater.sh -d -c --library /srv/kiwix/zims/library.xml /srv/kiwix/zims/
+kiwix-serve --library --monitorLibrary /srv/kiwix/zims/library.xml
+```
+
+With `--library <file>`, every run that changes the set of verified ZIMs rewrites the library file (with `kiwix-manage` from kiwix-tools), and kiwix-serve reloads it within a few seconds, without a restart:
+
+- A new ZIM is listed as soon as it is verified and renamed into place, before the old version is purged, so a title is never missing.
+- Only verified ZIMs are listed. Unfinished `.part` files and files behind an old-style `.~lock.` marker never are, and a ZIM that `kiwix-manage` cannot read is reported and left out.
+- The file is written in place and only when its content changes. kiwix-serve 3.8 stops noticing changes once its library file is replaced by a rename, so don't let other tools replace it either. If kiwix-serve happens to read a half-written file, it keeps serving the books it has and reloads once the write is done.
+- If no ZIM at all can be added, the existing library is kept and the run exits 1. A dry-run, a failed download and an internet outage leave the library untouched.
+- Paths in the library are relative to the library file. Put it in the ZIM directory so that it stays valid wherever the directory is mounted (for example in another container).
+
+Tested with kiwix-tools 3.7.0 (Debian 13) and the official `ghcr.io/kiwix/kiwix-serve` image (kiwix-tools 3.8.2).
+
 ## Running with Docker
 
 The repository includes a `Dockerfile` for unattended use with Docker or Podman. The image is based on `debian:trixie-slim` and holds only the script and the tools it needs. It runs as an unprivileged user (uid/gid 1000) under `tini`. The image contains no git and never updates itself: to update, build or pull a new image.
@@ -198,11 +217,12 @@ When the catalog or the downloads cannot be reached, the run fails with exit 1, 
 This script does not need root, however it does need the same rights as your ZIM directory or it won't be able to download and/or purge ZIMs.
 
 - Bash 4 or later.
-- GNU coreutils: `numfmt`, `stat`, `du`, `sha256sum`, `timeout` (and GNU `date`).
+- GNU coreutils: `numfmt`, `stat`, `du`, `df`, `sha256sum`, `timeout` (and GNU `date`).
 - `flock` from util-linux.
 - `wget` 1.x or GNU Wget2. Wget2 is supported: it follows metalinks by default, so the script passes `--no-metalink` to it for its metadata requests and downloads.
 - `grep` with `-P` (PCRE) support.
 - `git`, only if you use the self-update (`-U`).
+- `kiwix-manage` (from kiwix-tools) and `cmp` (from diffutils), only if you use `--library`.
 
 The script checks for these tools at startup and exits 1, naming every missing one, before it does any work.
 
@@ -251,6 +271,8 @@ Universal Options:
                                Specify units include M Mi G Gi, etc. See `man numfmt`
     --min-free <size>          Free space to keep in the ZIM directory after a download (default 1Gi, 0 disables).
                                A download that would leave less is skipped and the old ZIM kept.
+    --library <file>           Keeps a kiwix library XML file listing the verified ZIMs up to date, for
+                               kiwix-serve --library --monitorLibrary. Best placed in the ZIM directory.
     -S, --no-sha               Disables saving the zim checksum for future reference. Does not delete present checksums.
                                
 Action Method Options:

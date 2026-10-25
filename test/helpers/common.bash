@@ -48,6 +48,7 @@ common_setup() {
   export FAKE_WGET_LOG="$SANDBOX/wget.log"
   export FAKE_GIT_LOG="$SANDBOX/git.log"
   export FAKE_CLEAR_LOG="$SANDBOX/clear.log"
+  export FAKE_KIWIX_MANAGE_LOG="$SANDBOX/kiwix-manage.log"
   # df stub: plenty of free space unless a test says otherwise (1 TiB)
   export FAKE_DF_AVAIL=1099511627776
   : >"$FAKE_WGET_LOG"
