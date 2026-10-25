@@ -616,6 +616,8 @@ echo
 AnyDownloads=0
 # Set once any download of the run failed: the other ZIMs are still processed, but the script exits 1
 AnyDownloadFailed=0
+# Set once -f found a ZIM it could not verify, or a corrupt one it had to keep: the script exits 1
+AnyVerifyFailed=0
 
 for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
   RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
@@ -829,6 +831,7 @@ if [ $AnyDownloads -eq 1 ]; then
             else
               echo -e "${RED_BOLD}    ✗ Status : File size verification failed but purge skipped${CLEAR}"
               echo "✗ Status : File size verification failed but purge skipped" >>"$LOG_FILE"
+              AnyVerifyFailed=1
             fi
           else
             [[ $SKIP_PURGE -eq 0 ]] && echo -e "${RED_BOLD}    ✗ Status : *** Simulated *** File size verification failed, removing corrupt file ($FilePath)${CLEAR}"
@@ -838,16 +841,19 @@ if [ $AnyDownloads -eq 1 ]; then
           echo
         elif [[ ${#ExpectedHash} -ne 64 ]]; then
           echo -e "${YELLOW_BOLD}    No valid checksum available (metadata unavailable?), cannot verify $OldZIM. Skipping, file kept.${CLEAR}" && echo "Cannot verify $OldZIM: no valid checksum available, file kept" >>"$LOG_FILE"
+          AnyVerifyFailed=1
         elif ! hash_matches "$OldZIM" "$ExpectedHash"; then
           # we checked a very old file, but we will choose to not replace it because we cannot, so we will leave it. A regular update will purge it naturally
           if [[ ${LocalRequiresDownloadArray[$z]} -eq 3 ]]; then
             echo -e "${RED_BOLD}    ✗ Checksum failed, but no online version to replace it with. File kept.${CLEAR}"
             echo "✗ Checksum failed for $OldZIM, no online version to replace it with. File kept." >>"$LOG_FILE"
+            AnyVerifyFailed=1
             echo
             continue
           elif [[ ${LocalRequiresDownloadArray[$z]} -ne 1 ]]; then
             echo -e "${RED_BOLD}    ✗ Checksum failed. File kept; a normal update run (without -f) will replace it with the newer version.${CLEAR}"
             echo "✗ Checksum failed for $OldZIM. File kept; a normal update run will replace it with the newer version." >>"$LOG_FILE"
+            AnyVerifyFailed=1
             echo
             continue
           fi
@@ -860,6 +866,7 @@ if [ $AnyDownloads -eq 1 ]; then
             else
               echo -e "${RED_BOLD}    ✗ Status : Checksum failed but purge was skipped${CLEAR}"
               echo "✗ Status : Checksum failed but purge was skipped" >>"$LOG_FILE"
+              AnyVerifyFailed=1
               echo
               continue
             fi
@@ -1087,6 +1094,11 @@ fi
 if [[ $AnyDownloadFailed -eq 1 ]]; then
   echo -e "${RED_BOLD}✗ One or more downloads failed, see $LOG_FILE${CLEAR}"
   echo "✗ One or more downloads failed" >> "$LOG_FILE"
+  exit 1
+fi
+if [[ $AnyVerifyFailed -eq 1 ]]; then
+  echo -e "${RED_BOLD}✗ One or more ZIMs could not be verified or failed verification and were kept, see $LOG_FILE${CLEAR}"
+  echo "✗ One or more ZIMs could not be verified or failed verification and were kept" >> "$LOG_FILE"
   exit 1
 fi
 exit 0
