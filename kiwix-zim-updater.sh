@@ -7,10 +7,8 @@
 
 VER="3.5"
 
-# This array will contain all of the local zims, with the file extension
+# The names (without the path) of the local zims to process
 LocalZIMArray=()
-# This array will contain all of the local zims, without the file extension
-LocalZIMNameArray=()
 # This array will map the local zim to the index in the remote arrays that contains the same base file name
 LocalZIMRemoteIndexArray=()
 # What the download loop does with each local zim, one of the ACT_* values below
@@ -470,29 +468,27 @@ flags() {
   # Populate ZIM arrays from found ZIM(s)
   echo -e "${BLUE_BOLD}  -Parsing ZIM(s)...${CLEAR}"
 
-  for ((i = 0; i < ${#LocalZIMArray[@]}; i++)); do                                             # Loop through local ZIM(s).
-    LocalZIMNameArray[i]=$(basename "${LocalZIMArray[$i]}")                                   # Extract file name.
-    filename=$(basename "${LocalZIMArray[$i]}" | grep -ioP "^[\w:\/\-.]+(?=$COMPLETE_ENDING_REGEX$)") # Extract file name.
+  # The catalog index of each title (catalog titles end in "_"); the first entry wins
+  local -A catalogIndex=()
+  local i z title
+  for z in "${!Basenames[@]}"; do
+    [[ -n "${catalogIndex[${Basenames[$z]}]+set}" ]] || catalogIndex[${Basenames[$z]}]="$z"
+  done
 
-    # Search MasterZIMArray for the current local ZIM to discover the online Root (directory) for the URL
-    for ((z = 0; z < ${#Basenames[@]}; z++)); do
-      if [[ ${Basenames[$z]} == "$filename" ]]; then # Match Found (ignore the filename datepart).
-        LocalZIMRemoteIndexArray[i]="$z"
-        break
-      else # No Match Found.
-        LocalZIMRemoteIndexArray[i]="-1"
-      fi
-    done
+  for i in "${!LocalZIMArray[@]}"; do
+    title=$(echo "${LocalZIMArray[$i]}" | grep -ioP "^[\w:\/\-.]+(?=$COMPLETE_ENDING_REGEX$)")
+    LocalZIMRemoteIndexArray[i]=-1
+    [[ -n "$title" ]] && [[ -n "${catalogIndex[$title]+set}" ]] && LocalZIMRemoteIndexArray[i]="${catalogIndex[$title]}"
 
     if [[ ${LocalZIMRemoteIndexArray[i]} -eq -1 ]]; then
-      echo -e "${RED_REGULAR}    ✗ ${LocalZIMNameArray[$i]}  No online match found.${CLEAR}"
+      echo -e "${RED_REGULAR}    ✗ ${LocalZIMArray[$i]}  No online match found.${CLEAR}"
     else
-      echo -e "${GREEN_BOLD}    ✓ ${LocalZIMNameArray[$i]}  [${RemoteCategory[${LocalZIMRemoteIndexArray[$i]}]}]${CLEAR}"
+      echo -e "${GREEN_BOLD}    ✓ ${LocalZIMArray[$i]}  [${RemoteCategory[${LocalZIMRemoteIndexArray[$i]}]}]${CLEAR}"
     fi
   done
 
   echo
-  echo -e "${GREEN_REGULAR}    ${#LocalZIMNameArray[*]} ZIM(s) found.${CLEAR}"
+  echo -e "${GREEN_REGULAR}    ${#LocalZIMArray[*]} ZIM(s) found.${CLEAR}"
 }
 
 # detect_wget_flavor - GNU Wget2 follows metalinks unless told not to; wget 1.x does not know the option
@@ -936,9 +932,9 @@ main() {
   # ZIMs that -f verified as good in this run: a .part next to one of them is a replacement that is no longer needed
   VerifiedZIMs=()
 
-  for ((i = 0; i < ${#LocalZIMNameArray[@]}; i++)); do
+  for ((i = 0; i < ${#LocalZIMArray[@]}; i++)); do
     RemoteIndex=${LocalZIMRemoteIndexArray[$i]}
-    FileName=${LocalZIMNameArray[$i]}
+    FileName=${LocalZIMArray[$i]}
     if [[ $RemoteIndex -eq -1 ]]; then
       if [[ $VERIFY_LIBRARY -eq 1 ]] && [[ -f "$ZIMPath$FileName.sha256" ]]; then
         LocalActionArray+=("$ACT_VERIFY_UNLISTED")
@@ -1048,7 +1044,7 @@ main() {
 
   # Let's Start the download process, but only if we have actual downloads to do.
   if [ $AnyDownloads -eq 1 ]; then
-    for ((z = 0; z < ${#LocalZIMNameArray[@]}; z++)); do # Iterate through the download queue.
+    for ((z = 0; z < ${#LocalZIMArray[@]}; z++)); do # Iterate through the download queue.
       Action=${LocalActionArray[$z]}
       RemoteIndex=${LocalZIMRemoteIndexArray[$z]}
       [[ $Action -eq $ACT_NONE ]] && continue
@@ -1061,7 +1057,7 @@ main() {
       ExpectedHash=""
       HashFromCache=0 # set when -f verifies against the cached .sha256 because the metadata is unavailable
 
-      OldZIM=${LocalZIMNameArray[$z]}
+      OldZIM=${LocalZIMArray[$z]}
       OldZIMPath=$ZIMPath$OldZIM
 
       echo -e "${BLUE_BOLD}  Processing $OldZIM${CLEAR}"
