@@ -170,19 +170,11 @@ listed() {
 }
 
 @test "library: kiwix-manage is only required with --library" {
-  local tooldir="$SANDBOX/tools" tool src
-  local base_path="${PATH#"$STUB_BIN:"}"
-  mkdir "$tooldir"
-  for tool in bash env readlink realpath basename dirname date head tail grep tee uniq wc ls numfmt du df sha256sum \
-    touch rm mv cp cat mkdir mktemp sleep timeout flock sed awk tr sort stat find cut id uname cmp; do
-    src="$(PATH="$base_path" command -v "$tool")" || continue
-    ln -s "$src" "$tooldir/$tool"
-  done
-  for tool in wget git clear; do ln -s "$STUB_BIN/$tool" "$tooldir/$tool"; done
+  make_tooldir kiwix-manage
   make_local_zim "$WOLD"
-  PATH="$tooldir" run_updater "$ZIMS"
+  PATH="$TOOLDIR" run_updater "$ZIMS"
   assert_success
-  PATH="$tooldir" run_updater --library "$LIB" "$ZIMS"
+  PATH="$TOOLDIR" run_updater --library "$LIB" "$ZIMS"
   assert_failure 1
   assert_output --partial 'kiwix-manage'
 }

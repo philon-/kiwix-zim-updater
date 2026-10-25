@@ -268,16 +268,9 @@ assert_fixture_arrays() {
 }
 
 @test "check_dependencies: a missing numfmt exits 1 and names it" {
-  local tooldir="$SANDBOX/tools" tool src
-  local base_path="${PATH#"$STUB_BIN:"}"
   SKIP_UPDATE=1
-  mkdir "$tooldir"
-  for tool in sha256sum flock stat du df timeout grep; do
-    src="$(PATH="$base_path" command -v "$tool")" || continue
-    ln -s "$src" "$tooldir/$tool"
-  done
-  ln -s "$STUB_BIN/wget" "$tooldir/wget"
-  PATH="$tooldir" run check_dependencies
+  make_tooldir numfmt
+  PATH="$TOOLDIR" run check_dependencies
   assert_failure 1
   assert_output --partial 'Missing required tool(s): numfmt. '
   run cat "$LOG_FILE"

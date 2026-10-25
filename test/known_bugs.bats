@@ -269,19 +269,9 @@ EOF
 }
 
 @test "H7: a missing wget exits 1 with a clear message" {
-  local tooldir="$SANDBOX/tools" tool src
-  local base_path="${PATH#"$STUB_BIN:"}"
-  mkdir "$tooldir"
-  for tool in bash env readlink realpath basename dirname date head tail grep \
-    tee uniq wc ls numfmt du sha256sum touch rm mv cp mkdir mktemp cat sleep \
-    timeout flock sed awk tr sort stat find cut id uname df; do
-    src="$(PATH="$base_path" command -v "$tool")" || continue
-    ln -s "$src" "$tooldir/$tool"
-  done
-  ln -s "$STUB_BIN/git" "$tooldir/git"
-  ln -s "$STUB_BIN/clear" "$tooldir/clear"
+  make_tooldir wget
   make_local_zim "$OLD_WP"
-  PATH="$tooldir" run_updater "$ZIMS"
+  PATH="$TOOLDIR" run_updater "$ZIMS"
   assert_failure 1
   assert_output --partial 'wget'
   refute_output --partial 'command not found'

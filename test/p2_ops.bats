@@ -11,31 +11,6 @@ setup() {
 
 OLD_WP=wikipedia_en_test_2025-12.zim
 
-# make_tooldir [<tool to leave out>...]
-# Build $SANDBOX/tools with symlinks to the real tools the script needs, plus
-# the wget, git and clear stubs, and leave out the named tools.
-make_tooldir() {
-  local tooldir="$SANDBOX/tools" tool src skip
-  local base_path="${PATH#"$STUB_BIN:"}"
-  mkdir -p "$tooldir"
-  for tool in bash env readlink realpath basename dirname date head tail grep \
-    tee uniq wc ls numfmt du sha256sum touch rm mv cp mkdir mktemp cat sleep \
-    timeout flock sed awk tr sort stat find cut id uname df; do
-    for skip in "$@"; do
-      [[ "$tool" == "$skip" ]] && continue 2
-    done
-    src="$(PATH="$base_path" command -v "$tool")" || continue
-    ln -s "$src" "$tooldir/$tool"
-  done
-  for tool in wget git clear; do
-    for skip in "$@"; do
-      [[ "$tool" == "$skip" ]] && continue 2
-    done
-    ln -s "$STUB_BIN/$tool" "$tooldir/$tool"
-  done
-  TOOLDIR="$tooldir"
-}
-
 ###############################################################################
 # H7: dependency preflight
 

@@ -119,6 +119,32 @@ download_log() {
   cat "$RUN_DIR/download.log" 2>/dev/null || true
 }
 
+# make_tooldir [<tool to leave out>...]
+# Build $SANDBOX/tools ($TOOLDIR) with symlinks to the real tools the script needs, plus the wget, git, clear, df and
+# kiwix-manage stubs, and leave out the named tools. Run the script with PATH="$TOOLDIR" to hide a tool from it.
+make_tooldir() {
+  local tooldir="$SANDBOX/tools" tool src skip
+  local base_path="${PATH#"$STUB_BIN:"}"
+  mkdir -p "$tooldir"
+  for tool in bash env readlink realpath basename dirname date head tail grep \
+    tee uniq wc ls numfmt du sha256sum touch rm mv cp mkdir mktemp cat sleep \
+    timeout flock sed awk tr sort stat find cut id uname cmp; do
+    for skip in "$@"; do
+      [[ "$tool" == "$skip" ]] && continue 2
+    done
+    src="$(PATH="$base_path" command -v "$tool")" || continue
+    ln -s "$src" "$tooldir/$tool"
+  done
+  for tool in wget git clear df kiwix-manage; do
+    for skip in "$@"; do
+      [[ "$tool" == "$skip" ]] && continue 2
+    done
+    ln -s "$STUB_BIN/$tool" "$tooldir/$tool"
+  done
+  # shellcheck disable=SC2034 # read by the test files, which shellcheck does not see
+  TOOLDIR="$tooldir"
+}
+
 # keep_copy <name> - keep a pristine copy of a file in the ZIM directory, for assert_zim_unchanged after the run.
 keep_copy() {
   cp "$ZIMS/$1" "$SANDBOX/$1.orig"
