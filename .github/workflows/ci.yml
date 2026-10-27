@@ -7,9 +7,10 @@ on:
 permissions:
   contents: read
 
-# A push to a branch with an open pull request starts two runs: keep only the newest per branch
+# A push to a branch with an open pull request starts two runs: keep only the newest per branch. The branch is keyed by
+# the repository that owns it, so a pull request from a fork's main never cancels (or is cancelled by) a push to ours.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
