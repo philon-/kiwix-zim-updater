@@ -291,12 +291,15 @@ assert_fixture_arrays() {
 # Sourcing: the source guard keeps main from running, and nothing else runs at top level
 
 @test "sourcing the script defines main and the helpers without running anything" {
-  local before
-  before="$(cd "$SANDBOX" && find . -printf '%P\n' | LC_ALL=C sort)"
-  run bash -c 'source "$1" && declare -F main master_scrape validate_zim_dir list_local_zims match_to_catalog self_update usage_example hash_matches write_checksum_file >/dev/null && echo sourced-ok' _ "$SCRIPT_COPY"
+  # setup() has already sourced $SCRIPT_COPY, so a baseline taken now would include whatever that first source created.
+  # Source a fresh copy from an empty directory instead: afterwards the directory must hold nothing but the script.
+  local fresh="$SANDBOX/fresh"
+  mkdir "$fresh"
+  cp "$SCRIPT_COPY" "$fresh/kiwix-zim-updater.sh"
+  run bash -c 'cd "$1" && source ./kiwix-zim-updater.sh && declare -F main master_scrape validate_zim_dir list_local_zims match_to_catalog self_update usage_example hash_matches write_checksum_file >/dev/null && echo sourced-ok' _ "$fresh"
   assert_success
   assert_output 'sourced-ok'
-  assert_equal "$(cd "$SANDBOX" && find . -printf '%P\n' | LC_ALL=C sort)" "$before"
+  assert_equal "$(cd "$fresh" && find . -mindepth 1 -printf '%P\n')" 'kiwix-zim-updater.sh'
   refute_nonempty "$FAKE_WGET_LOG"
   refute_nonempty "$FAKE_GIT_LOG"
 }
