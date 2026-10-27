@@ -5,7 +5,9 @@
 # Copyright (C) 2023-2026 jojo2357
 # SPDX-License-Identifier: GPL-2.0-only
 
-VER="3.5"
+# The version, e.g. 2026.10.25+a1b2c3d: the date and short hash of the commit. A build without the git clone (the
+# Docker image) stamps it here; otherwise script_version reads it from the clone the script runs from.
+VERSION=""
 
 # The names (without the path) of the local zims to process
 LocalZIMArray=()
@@ -792,7 +794,7 @@ parse_args() {
         shift # discard argument
         ;;
       -v | --version)
-        echo "$VER"
+        script_version
         exit 0
         ;;
       -p | --skip-purge)
@@ -880,9 +882,19 @@ parse_args() {
   [[ ${#POSITIONAL_ARGS[@]} -gt 1 ]] && usage_error "Only one ZIM directory can be given, got ${#POSITIONAL_ARGS[@]}: ${POSITIONAL_ARGS[*]}"
 }
 
+# script_version - Print the stamped VERSION, else the date and short hash of the clone's HEAD (a local, read-only git
+# call), else "unknown"
+script_version() {
+  local version="$VERSION"
+  if [[ -z "$version" ]] && [[ -e "$SCRIPTPATH/.git" ]]; then
+    version="$(timeout 10s git -C "$SCRIPTPATH" log -1 --no-show-signature --date=format:%Y.%m.%d --format=%cd+%h 2>/dev/null)"
+  fi
+  echo "${version:-unknown}"
+}
+
 # print_banner - Name the script and its version, and say whether this run may change anything (also in the log)
 print_banner() {
-  say "${BLUE_BOLD}" "kiwix-zim-updater $VER"
+  say "${BLUE_BOLD}" "kiwix-zim-updater $(script_version)"
   if [[ $DEBUG -eq 1 ]]; then
     say "${YELLOW_BOLD}" "Dry run: nothing will be changed (use -d to apply)"
   else

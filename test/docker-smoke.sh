@@ -47,7 +47,8 @@ status=$?
 if [[ $status -eq 0 && "$out" == Usage:* ]]; then pass "-h exits 0 and prints the usage"; else fail "-h: exit $status: $out"; fi
 
 echo "== --version"
-expected="$(grep -oP '^VER="\K[^"]+' "$REPO_ROOT/kiwix-zim-updater.sh")"
+# make docker-build stamps the checked-out commit's date and hash into the image
+expected="$(git -C "$REPO_ROOT" log -1 --no-show-signature --date=format:%Y.%m.%d --format=%cd+%h)"
 out="$("$ENGINE" run "${run_opts[@]}" --network none "$IMAGE" --version 2>&1)"
 status=$?
 if [[ $status -eq 0 && "$out" == "$expected" ]]; then pass "--version prints $out"; else fail "--version: exit $status: $out"; fi

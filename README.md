@@ -112,7 +112,7 @@ Web Download Options:
 
 ```
 
-`-v` prints the version.
+`-v` prints the version: the date and short hash of the commit, e.g. `2026.10.25+a1b2c3d`. It is read from the git clone the script runs from; `make docker-build` stamps it into the image (with a plain `docker build`, pass `--build-arg VERSION=...`). Without either it is `unknown`.
 
 ## Development
 

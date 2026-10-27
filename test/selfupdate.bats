@@ -6,10 +6,17 @@ setup() {
   common_setup
 }
 
+# assert_only_version_lookup - The only git calls were the script's read-only `log -1` for its version
+assert_only_version_lookup() {
+  assert_nonempty "$FAKE_GIT_LOG"
+  run grep -v -e ' log -1 --no-show-signature ' "$FAKE_GIT_LOG"
+  assert_output ''
+}
+
 ###############################################################################
 # Opt-in
 
-@test "a default run makes no git call, even next to a .git (H8)" {
+@test "a default run makes no git call but the read-only version lookup, even next to a .git (H8)" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=current
   make_local_zim "$WP_OLD"
@@ -17,11 +24,10 @@ setup() {
   assert_success
   assert_output --partial '1. Checking for Script Updates...'
   assert_output --partial 'Check Skipped (use -U to enable)'
-  run cat "$FAKE_GIT_LOG"
-  assert_output ''
+  assert_only_version_lookup
 }
 
-@test "-u and --skip-update are still accepted and run no git (H8)" {
+@test "-u and --skip-update are still accepted and run no git but the version lookup (H8)" {
   mkdir "$SANDBOX/bin/.git"
   make_local_zim "$WP_OLD"
   run_updater -u "$ZIMS"
@@ -29,8 +35,7 @@ setup() {
   assert_output --partial 'Check Skipped'
   run_updater --skip-update "$ZIMS"
   assert_success
-  run cat "$FAKE_GIT_LOG"
-  assert_output ''
+  assert_only_version_lookup
 }
 
 @test "the usage documents -U and the -u compatibility no-op (H8)" {
@@ -139,10 +144,10 @@ sgit() {
     -c commit.gpgsign=false -c init.defaultBranch=main "$@"
 }
 
-# Publish a new script version (VER=9.9-test) to origin from another clone.
+# Publish a new commit of the script (it gains a "# v2" line) to origin from another clone.
 push_update() {
   sgit clone -q "$SANDBOX/origin.git" "$SANDBOX/dev"
-  sed -i 's/^VER=.*/VER="9.9-test"/' "$SANDBOX/dev/kiwix-zim-updater.sh"
+  echo '# v2' >>"$SANDBOX/dev/kiwix-zim-updater.sh"
   sgit -C "$SANDBOX/dev" commit -q -am 'v2'
   sgit -C "$SANDBOX/dev" push -q origin main
 }
@@ -151,6 +156,11 @@ push_update() {
 run_clone() {
   cd "$RUN_DIR" || return 1
   PATH="$SANDBOX/realgit:$PATH" run bash "$CLONE_SCRIPT" "$@"
+}
+
+# version_of <repository> [<rev>] - The version the script reports for that commit
+version_of() {
+  sgit -C "$1" log -1 --no-show-signature --date=format:%Y.%m.%d --format=%cd+%h "${2:-HEAD}"
 }
 
 head_of() {
@@ -165,11 +175,11 @@ head_of() {
   assert_success
   assert_output --partial 'Version: Mismatched'
   assert_output --partial 'Running the updated version'
-  assert_output --partial 'kiwix-zim-updater 9.9-test'
+  assert_output --partial "kiwix-zim-updater $(version_of "$SANDBOX/origin.git" main)"
   assert_equal "$(grep -c 'Update Complete' <<<"$output")" 1
   assert_equal "$(grep -c '3. Processing ZIM(s)...' <<<"$output")" 1
   assert_equal "$(head_of "$SANDBOX/clone")" "$(head_of "$SANDBOX/origin.git" main)"
-  grep -q '^VER="9.9-test"$' "$CLONE_SCRIPT"
+  grep -qx '# v2' "$CLONE_SCRIPT"
   assert_equal "$(grep -c 'pull' "$FAKE_GIT_LOG")" 1
   assert_equal "$(grep -c 'fetch' "$FAKE_GIT_LOG")" 1
   run grep 'stash' "$FAKE_GIT_LOG"
@@ -200,7 +210,7 @@ head_of() {
   assert_success
   assert_output --partial 'has local changes: Not updating'
   refute_output --partial 'Update Complete'
-  refute_output --partial 'kiwix-zim-updater 9.9-test'
+  refute_output --partial "kiwix-zim-updater $(version_of "$SANDBOX/origin.git" main)"
   assert_output --partial '3. Processing ZIM(s)...'
   assert_equal "$(head_of "$SANDBOX/clone")" "$before"
   run tail -n 1 "$SANDBOX/clone/NOTES"
@@ -257,15 +267,14 @@ head_of() {
   assert_equal "$(head_of "$SANDBOX/clone")" "$before"
 }
 
-@test "without -U a clone with an update available makes no git call (H8)" {
+@test "without -U a clone with an update available makes no git call but the version lookup (H8)" {
   setup_clone
   push_update
   make_local_zim "$WP_OLD"
   run_clone "$ZIMS"
   assert_success
   assert_output --partial 'Check Skipped (use -U to enable)'
-  run cat "$FAKE_GIT_LOG"
-  assert_output ''
+  assert_only_version_lookup
 }
 
 @test "-U re-execs correctly when started as 'bash kiwix-zim-updater.sh' from inside the clone (R8)" {
@@ -283,7 +292,7 @@ head_of() {
   PATH="$SANDBOX/realgit:$PATH" run bash kiwix-zim-updater.sh -U "$ZIMS"
   assert_success
   assert_output --partial 'Running the updated version'
-  assert_output --partial 'kiwix-zim-updater 9.9-test'
+  assert_output --partial "kiwix-zim-updater $(version_of "$SANDBOX/origin.git" main)"
 }
 
 @test "isolation: inherited git variables and user files cannot leak into the sandbox repositories" {

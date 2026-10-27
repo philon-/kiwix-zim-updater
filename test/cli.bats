@@ -29,11 +29,25 @@ setup() {
   assert_equal "$output" "$readme"
 }
 
-@test "-v prints the version and exits 0" {
+@test "-v prints the version stamped into the script and exits 0" {
+  sed -i 's/^VERSION=""$/VERSION="2026.01.02+abc1234"/' "$SCRIPT_COPY"
   run_updater -v
   assert_success
-  assert_output "$(grep -oP '^VER="\K[^"]+' "$SCRIPT_COPY")"
-  refute_output ''
+  assert_output '2026.01.02+abc1234'
+}
+
+@test "-v prints the commit date and hash of the git clone the script runs from" {
+  mkdir "$SANDBOX/bin/.git"
+  run_updater -v
+  assert_success
+  assert_output '2026.01.02+fake123'
+}
+
+@test "-v prints unknown without a stamp or a git clone, and runs no git" {
+  run_updater -v
+  assert_success
+  assert_output 'unknown'
+  refute_nonempty "$FAKE_GIT_LOG"
 }
 
 @test "default run is a dry-run and says so" {

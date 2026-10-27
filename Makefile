@@ -25,6 +25,9 @@ HARNESS_LIBS := $(wildcard test/helpers/*.bash)
 
 # Image tag for `make docker-build`, `make docker-test` and `make library-test`.
 IMAGE ?= localhost/kiwix-zim-updater:test
+# Stamped into the image, which has no git clone: the version -v reports, the date and short hash of the checked-out
+# commit. Expanded only by docker-build; set IMAGE_VERSION= to build an image that reports "unknown".
+IMAGE_VERSION ?= $(shell git log -1 --no-show-signature --date=format:%Y.%m.%d --format=%cd+%h 2>/dev/null)
 # podman's default OCI image format drops HEALTHCHECK
 BUILD_OPTS ?= $(if $(filter podman%,$(notdir $(CONTAINER_ENGINE))),--format docker)
 
@@ -48,7 +51,7 @@ lint:
 # Build the container image as IMAGE.
 docker-build:
 	$(need_engine)
-	$(CONTAINER_ENGINE) build $(BUILD_OPTS) -t $(IMAGE) .
+	$(CONTAINER_ENGINE) build $(BUILD_OPTS) $(if $(IMAGE_VERSION),--build-arg VERSION=$(IMAGE_VERSION)) -t $(IMAGE) .
 
 # Smoke-test the image offline with the test stubs. Not part of `make test`.
 docker-test: docker-build

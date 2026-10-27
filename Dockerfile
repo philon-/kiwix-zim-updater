@@ -29,7 +29,19 @@ RUN groupadd --gid 1000 kiwix \
     && mkdir -p /data /state \
     && chown kiwix:kiwix /data /state
 
+# The version -v reports, e.g. 2026.10.25+a1b2c3d (make docker-build passes the checked-out commit's). The image has no
+# git clone to read it from, so it is stamped into the script; without it the script reports "unknown".
+ARG VERSION=""
+LABEL org.opencontainers.image.version="$VERSION"
+
 COPY --chmod=0755 kiwix-zim-updater.sh docker/docker-entrypoint.sh docker/healthcheck.sh /usr/local/bin/
+
+RUN if [ -n "$VERSION" ]; then \
+        printf '%s' "$VERSION" | grep -qxE '[0-9.]+\+[0-9a-f]+' \
+            || { echo "VERSION must look like 2026.10.25+a1b2c3d, got '$VERSION'" >&2; exit 1; }; \
+        sed -i "s/^VERSION=\"\"\$/VERSION=\"$VERSION\"/" /usr/local/bin/kiwix-zim-updater.sh \
+            && grep -qx "VERSION=\"$VERSION\"" /usr/local/bin/kiwix-zim-updater.sh; \
+    fi
 
 # /data: the ZIM directory. /state: the working directory (download.log, kiwix-index cache, last-run status).
 # Mount both: without a /data mount, runs see an empty anonymous volume and fail with "No ZIMs found" (exit 1).

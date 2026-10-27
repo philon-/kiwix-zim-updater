@@ -104,12 +104,15 @@ setup() {
   assert_output '1'
 }
 
-@test "stubs: git fails loudly by default and fakes a dev branch on request" {
+@test "stubs: git fails loudly by default, fakes a dev branch on request and always answers the version lookup" {
   run git status
   assert_failure 97
   FAKE_GIT_MODE=other-branch run git rev-parse --abbrev-ref HEAD
   assert_success
   assert_output 'dev'
+  run git -C "$SANDBOX" log -1 --format=%cd+%h
+  assert_success
+  assert_output '2026.01.02+fake123'
   run cat "$FAKE_GIT_LOG"
   assert_line 'status'
 }
