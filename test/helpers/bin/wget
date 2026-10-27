@@ -8,7 +8,7 @@
 # so the download host and the mirror host serve the same tree.
 #
 # Supported options: -q, -c, -S, --show-progress, --progress=..., --spider,
-# --connect-timeout=..., --read-timeout=..., --tries=...,
+# --connect-timeout=..., --read-timeout=..., --tries=..., --no-metalink (Wget2 only),
 # -O -, -O <file>, --version. Anything else exits 2 like a wget parse error,
 # so new wget usage in the script has to be taught to this stub explicitly.
 #
@@ -51,20 +51,15 @@ while [[ $# -gt 0 ]]; do
       have_out=1
       shift 2
       ;;
-    --output-document=*)
-      out="${1#*=}"
-      have_out=1
-      shift
-      ;;
     --spider)
       spider=1
       shift
       ;;
-    -c | --continue)
+    -c)
       resume=1
       shift
       ;;
-    -q | --quiet | -S | --server-response | --show-progress | --progress=* | --connect-timeout=* | --read-timeout=* | --tries=*)
+    -q | -S | --show-progress | --progress=* | --connect-timeout=* | --read-timeout=* | --tries=*)
       shift
       ;;
     --no-metalink)
@@ -167,12 +162,9 @@ size=$(stat -c %s "$src")
 if matches "${FAKE_WGET_NETFAIL:-}"; then
   exit 4
 fi
-if matches "${FAKE_WGET_FAIL:-}"; then
+if matches "${FAKE_WGET_FAIL:-}" || matches "${FAKE_WGET_SHORT:-}"; then
   head -c "$((size / 2))" "$src" >"$out"
-  exit 4
-fi
-if matches "${FAKE_WGET_SHORT:-}"; then
-  head -c "$((size / 2))" "$src" >"$out"
+  matches "${FAKE_WGET_FAIL:-}" && exit 4
   exit 0
 fi
 if matches "${FAKE_WGET_CORRUPT:-}"; then
@@ -189,6 +181,8 @@ if [[ $resume -eq 1 ]] && [[ -f "$out" ]]; then
   elif [[ $have -eq $size ]]; then
     exit 0
   fi
+  # A file larger than the payload falls through and is overwritten with the payload. Real wget would get a 416 and
+  # leave it alone; the script starts such a download over itself ("larger than published"), so no test relies on it.
 fi
 
 emit >"$out"

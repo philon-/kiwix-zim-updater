@@ -309,6 +309,19 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
   [[ "$(stub_runs)" -eq 0 ]]
 }
 
+@test "entrypoint: an invalid value is a usage error even when STATE_DIR does not exist" {
+  run --separate-stderr env RUN_INTERVAL=once DRY_RUN=maybe STATE_DIR="$SANDBOX/missing" "$ENTRYPOINT"
+  assert_failure 2
+  [[ "$stderr" == *DRY_RUN*maybe* ]]
+  run --separate-stderr env RUN_INTERVAL=1w STATE_DIR="$SANDBOX/missing" "$ENTRYPOINT"
+  assert_failure 2
+  [[ "$stderr" == *RUN_INTERVAL* ]]
+  run --separate-stderr env STATE_DIR="$SANDBOX/missing" "$ENTRYPOINT" -U /data
+  assert_failure 2
+  [[ "$stderr" == *-U* ]]
+  [[ "$(stub_runs)" -eq 0 ]]
+}
+
 @test "entrypoint: an overflowing RUN_INTERVAL is a usage error, not a back-to-back loop" {
   local value
   for value in 9223372036854775808s 9223372036854775807d 1000000000000d 0000000000000001s; do
@@ -475,4 +488,25 @@ process_gone() { ! kill -0 "$1" 2>/dev/null; }
   run env RUN_INTERVAL=once STUB_EXIT=0 "$ENTRYPOINT"
   run "$HEALTHCHECK"
   assert_success
+}
+
+@test "compose.example.yaml documents exactly the variables the entrypoint reads" {
+  local name documented=() missing=()
+  # The keys of the updater's environment: block (the kiwix-serve example below it is commented out)
+  mapfile -t documented < <(awk '/^    environment:$/ { e = 1; next } e && /^    [^ ]/ { e = 0 }
+    e && match($0, /^      [A-Z][A-Z0-9_]*:/) { print substr($0, 7, RLENGTH - 7) }' "$REPO_ROOT/compose.example.yaml")
+  [[ ${#documented[@]} -gt 10 ]]
+  for name in "${documented[@]}"; do
+    # Read by the entrypoint (outside a comment), and unset before each test here so that none leaks in
+    grep -v '^[[:space:]]*#' "$REPO_ROOT/docker/docker-entrypoint.sh" | grep -qw "$name" ||
+      missing+=("$name: not in docker-entrypoint.sh")
+    [[ " ${ENTRYPOINT_ENV_VARS[*]} " == *" $name "* ]] || missing+=("$name: not in ENTRYPOINT_ENV_VARS")
+  done
+  # And the other way round: every variable but the test hook KIWIX_ZIM_UPDATER is documented
+  for name in "${ENTRYPOINT_ENV_VARS[@]}"; do
+    [[ "$name" == KIWIX_ZIM_UPDATER || " ${documented[*]} " == *" $name "* ]] ||
+      missing+=("$name: not in compose.example.yaml")
+  done
+  run printf '%s\n' "${missing[@]}"
+  assert_output ''
 }

@@ -10,14 +10,28 @@
 #                  never finds a .git and never touches this repository)
 #   $SANDBOX/run   CWD for the run; download.log and kiwix-index land here
 #   $SANDBOX/zims  the ZIM directory passed to the script ($ZIMS)
-# and PATH starts with test/helpers/bin, so wget, git and clear are stubs.
+# and PATH starts with test/helpers/bin, so wget, git, df and kiwix-manage are stubs.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STUB_BIN="$REPO_ROOT/test/helpers/bin"
 FIXTURES_SRC="$REPO_ROOT/test/fixtures"
 TEST_LIBS="$REPO_ROOT/test/libs"
 
+# Fixture names (see test/fixtures/catalog.xml). The catalog's current release of each title, an older local
+# release, and the path of the current release in the remote tree.
+# shellcheck disable=SC2034 # read by the test files, which shellcheck does not see
+{
+  WP_NEW=wikipedia_en_test_2026-01.zim
+  WP_OLD=wikipedia_en_test_2025-12.zim
+  WP_REMOTE=zim/wikipedia/$WP_NEW
+  WT_NEW=wiktionary_fr_test_2026-02a.zim
+  WT_OLD=wiktionary_fr_test_2026-02.zim
+  WT_REMOTE=zim/wiktionary/$WT_NEW
+}
+
 common_setup() {
+  # Every suite uses run --separate-stderr or run's status checks, which need bats 1.5 (else warning BW02)
+  bats_require_minimum_version 1.5.0
   load "$TEST_LIBS/bats-support/load"
   load "$TEST_LIBS/bats-assert/load"
 
@@ -47,7 +61,6 @@ common_setup() {
   export FAKE_FIXTURES="$FIXTURES_SRC"
   export FAKE_WGET_LOG="$SANDBOX/wget.log"
   export FAKE_GIT_LOG="$SANDBOX/git.log"
-  export FAKE_CLEAR_LOG="$SANDBOX/clear.log"
   export FAKE_KIWIX_MANAGE_LOG="$SANDBOX/kiwix-manage.log"
   export FAKE_KIWIX_MANAGE_SEEN="$SANDBOX/kiwix-manage.seen"
   # df stub: plenty of free space unless a test says otherwise (1 TiB)
@@ -65,6 +78,18 @@ common_setup() {
 use_fixture_copy() {
   cp -r "$FIXTURES_SRC" "$SANDBOX/fixtures"
   export FAKE_FIXTURES="$SANDBOX/fixtures"
+}
+
+# Add a catalog entry for a ZIM at the root of the download tree, outside any category (serving a fixture copy).
+add_root_level_catalog_entry() {
+  [[ "$FAKE_FIXTURES" == "$SANDBOX/fixtures" ]] || use_fixture_copy
+  local entry='  <entry>\n    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-zim" href="https://download.kiwix.test/zim/rootlevel_test_2026-01.zim.meta4" length="1024" />\n  </entry>'
+  sed -i "s#</feed>#$entry\n</feed>#" "$FAKE_FIXTURES/catalog.xml"
+}
+
+# Number of ZIMs the served catalog lists.
+catalog_zim_count() {
+  grep -c 'application/x-zim' "$FAKE_FIXTURES/catalog.xml"
 }
 
 # Path of a remote fixture file, e.g. remote_file zim/other/small_test_2025-12.zim
@@ -114,7 +139,80 @@ wget_downloads() {
   awk '{ for (i = 1; i < NF; i++) if ($i == "-O" && $(i + 1) != "-") { print; next } }' "$FAKE_WGET_LOG"
 }
 
+# assert_single_download <target> <url> - wget was asked for exactly one download, of <url> into <target>, with -c.
+# The network options in front of it are pinned once, in the network test.
+assert_single_download() {
+  run wget_downloads
+  # shellcheck disable=SC2154 # bats' run sets lines and output
+  [[ "${#lines[@]}" -eq 1 && "$output" == *" -c -O $1 $2" ]] || fail "expected one download '-c -O $1 $2', got: $output"
+}
+
 # The download log the script wrote in the run directory (empty if none).
 download_log() {
   cat "$RUN_DIR/download.log" 2>/dev/null || true
+}
+
+# make_tooldir [<tool to leave out>...]
+# Build $SANDBOX/tools ($TOOLDIR) with symlinks to the real tools the script needs, plus the wget, git, df and
+# kiwix-manage stubs, and leave out the named tools. Run the script with PATH="$TOOLDIR" to hide a tool from it.
+make_tooldir() {
+  local tooldir="$SANDBOX/tools" tool src skip
+  local base_path="${PATH#"$STUB_BIN:"}"
+  mkdir -p "$tooldir"
+  for tool in bash env readlink realpath basename dirname date head tail grep \
+    tee uniq wc ls numfmt du sha256sum touch rm mv cp mkdir mktemp cat sleep \
+    timeout flock sed awk tr sort stat find cut id uname cmp; do
+    for skip in "$@"; do
+      [[ "$tool" == "$skip" ]] && continue 2
+    done
+    src="$(PATH="$base_path" command -v "$tool")" || continue
+    ln -s "$src" "$tooldir/$tool"
+  done
+  for tool in wget git df kiwix-manage; do
+    for skip in "$@"; do
+      [[ "$tool" == "$skip" ]] && continue 2
+    done
+    ln -s "$STUB_BIN/$tool" "$tooldir/$tool"
+  done
+  # shellcheck disable=SC2034 # read by the test files, which shellcheck does not see
+  TOOLDIR="$tooldir"
+}
+
+# File checks that name the path when they fail:
+#   assert_exists <path>     a regular file exists at <path>
+#   assert_nonempty <path>   a non-empty regular file exists at <path>
+#   refute_exists <path>     nothing exists at <path>
+#   refute_nonempty <path>   nothing, or only an empty file, exists at <path>
+assert_exists() {
+  [[ -f "$1" ]] || fail "expected a file at $1"
+}
+assert_nonempty() {
+  [[ -f "$1" && -s "$1" ]] || fail "expected a non-empty file at $1"
+}
+refute_exists() {
+  [[ ! -e "$1" ]] || fail "expected nothing at $1"
+}
+refute_nonempty() {
+  [[ ! -s "$1" ]] || fail "expected nothing or an empty file at $1: $(head -c 500 "$1")"
+}
+
+# wait_until <seconds> <command...> - poll <command> until it succeeds; fail after <seconds>.
+wait_until() {
+  local timeout="$1" deadline
+  shift
+  deadline=$((SECONDS + timeout))
+  until "$@"; do
+    ((SECONDS < deadline)) || fail "gave up after ${timeout}s waiting for: $*"
+    sleep 0.1
+  done
+}
+
+# keep_copy <name> - keep a pristine copy of a file in the ZIM directory, for assert_zim_unchanged after the run.
+keep_copy() {
+  cp "$ZIMS/$1" "$SANDBOX/$1.orig"
+}
+
+# assert_zim_unchanged <name> - the file in the ZIM directory still matches the copy keep_copy made of it.
+assert_zim_unchanged() {
+  cmp "$ZIMS/$1" "$SANDBOX/$1.orig" || fail "$ZIMS/$1 is missing or changed"
 }

@@ -7,22 +7,29 @@ on:
 permissions:
   contents: read
 
+# A push to a branch with an open pull request starts two runs: keep only the newest per branch. The branch is keyed by
+# the repository that owns it, so a pull request from a fork's main never cancels (or is cancelled by) a push to ours.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
       - name: Show tool versions
         run: |
           bash --version | head -1
-          shellcheck --version
           wget --version | head -1
 
+      # The ShellCheck image pinned in the Makefile (SHELLCHECK_IMAGE), not the runner's shellcheck, so CI and local
+      # runs report the same findings
       - name: Lint
-        run: make lint
+        run: make lint SHELLCHECK_LOCAL= CONTAINER_ENGINE=docker
 
       - name: Test
         run: make test
@@ -30,7 +37,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Show tool versions
         run: docker version

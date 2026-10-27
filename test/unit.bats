@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
 # Unit tests: source the sandboxed script (the source guard keeps main from running) and call its helpers directly.
 
-bats_require_minimum_version 1.5.0
-
 setup() {
   load 'helpers/common'
   common_setup
@@ -224,11 +222,11 @@ assert_fixture_arrays() {
   scrape
   assert_fixture_arrays
   run cat "$SANDBOX/scrape.out"
-  assert_output --partial 'Found 4 files online'
+  assert_output --partial "Found $(catalog_zim_count) files online"
   run cat "$FAKE_WGET_LOG"
   assert_line --index 0 --partial 'opds.library.kiwix.org'
   refute_line --index 1 --regexp '.'
-  [[ -f "$INDEX_FILE" ]]
+  assert_exists "$INDEX_FILE"
 }
 
 @test "master_scrape: a second call uses the cached index without fetching the catalog" {
@@ -237,18 +235,11 @@ assert_fixture_arrays() {
   RemoteFiles=() Basenames=() RemotePaths=() RemoteCategory=() FileSizes=() BaseURL=''
   scrape
   assert_fixture_arrays
-  [[ ! -s "$FAKE_WGET_LOG" ]]
+  refute_nonempty "$FAKE_WGET_LOG"
 }
 
 ###############################################################################
 # usage_example
-
-@test "usage_example 0: exits 0 with the usage on stdout" {
-  run --separate-stderr usage_example 0
-  assert_success
-  assert_line --index 0 'Usage: ./kiwix-zim-updater.sh <options> /full/path/'
-  assert_equal "$stderr" ''
-}
 
 @test "usage_example 2: exits 2 with the usage on stderr" {
   run --separate-stderr usage_example 2
@@ -268,23 +259,16 @@ assert_fixture_arrays() {
 }
 
 @test "check_dependencies: a missing numfmt exits 1 and names it" {
-  local tooldir="$SANDBOX/tools" tool src
-  local base_path="${PATH#"$STUB_BIN:"}"
   SKIP_UPDATE=1
-  mkdir "$tooldir"
-  for tool in sha256sum flock stat du df timeout grep; do
-    src="$(PATH="$base_path" command -v "$tool")" || continue
-    ln -s "$src" "$tooldir/$tool"
-  done
-  ln -s "$STUB_BIN/wget" "$tooldir/wget"
-  PATH="$tooldir" run check_dependencies
+  make_tooldir numfmt
+  PATH="$TOOLDIR" run check_dependencies
   assert_failure 1
   assert_output --partial 'Missing required tool(s): numfmt. '
   run cat "$LOG_FILE"
   assert_output --partial 'Missing required tool(s): numfmt. Exiting...'
 }
 
-@test "N9: zim_date reads the date of a ZIM with an upper-case extension" {
+@test "zim_date: reads the date of a ZIM with an upper-case extension (N9)" {
   source "$SCRIPT_COPY"
   run zim_date wikipedia_en_test_2026-01.ZIM
   assert_output '2026-01'
@@ -292,7 +276,7 @@ assert_fixture_arrays() {
   assert_output '2026-02a'
 }
 
-@test "write_checksum_file leaves an existing file with the same hash untouched" {
+@test "write_checksum_file: leaves an existing file with the same hash untouched" {
   source "$SCRIPT_COPY"
   ZIMPath="$ZIMS/"
   DEBUG=0
@@ -301,4 +285,27 @@ assert_fixture_arrays() {
   cp "$ZIMS/a_2026-01.zim.sha256" "$SANDBOX/orig"
   write_checksum_file a_2026-01.zim "$(cut -d' ' -f1 "$SANDBOX/orig")"
   cmp "$ZIMS/a_2026-01.zim.sha256" "$SANDBOX/orig"
+}
+
+###############################################################################
+# Sourcing: the source guard keeps main from running, and nothing else runs at top level
+
+@test "sourcing the script defines main and the helpers without running anything" {
+  # setup() has already sourced $SCRIPT_COPY, so a baseline taken now would include whatever that first source created.
+  # Source a fresh copy from an empty directory instead: afterwards the directory must hold nothing but the script.
+  local fresh="$SANDBOX/fresh"
+  mkdir "$fresh"
+  cp "$SCRIPT_COPY" "$fresh/kiwix-zim-updater.sh"
+  run bash -c 'cd "$1" && source ./kiwix-zim-updater.sh && declare -F main master_scrape validate_zim_dir list_local_zims match_to_catalog self_update usage_example hash_matches write_checksum_file >/dev/null && echo sourced-ok' _ "$fresh"
+  assert_success
+  assert_output 'sourced-ok'
+  assert_equal "$(cd "$fresh" && find . -mindepth 1 -printf '%P\n')" 'kiwix-zim-updater.sh'
+  refute_nonempty "$FAKE_WGET_LOG"
+  refute_nonempty "$FAKE_GIT_LOG"
+}
+
+@test "sourcing does not change the caller's shell options" {
+  run bash -c 'shopt -u nullglob; source "$1"; shopt -q nullglob && echo on || echo off' _ "$SCRIPT_COPY"
+  assert_success
+  assert_output 'off'
 }

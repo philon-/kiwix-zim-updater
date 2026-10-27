@@ -61,7 +61,7 @@ PUID=$(stat -c %u /srv/kiwix/zims) PGID=$(stat -c %g /srv/kiwix/zims) docker com
 docker compose logs -f kiwix-zim-updater
 ```
 
-The container runs the updater immediately and then every `RUN_INTERVAL` (default `24h`). Its defaults are dry-run (`DRY_RUN=true`), checksums (`CHECKSUM=true`) and `--clean-partials`; set `DRY_RUN: "false"` once the log looks right. `/data` is the ZIM directory, `/state` holds the log, the catalog cache and the last run's status. The container is unhealthy while the last run failed, which is how an outage shows up; nothing in `/data` is touched. If it cannot record a run's status in `/state`, it stops with exit 1 rather than report a stale state. `docker stop` ends a run cleanly, and an interrupted download resumes next time. The compose example also sets `LIBRARY_XML` and contains an optional kiwix-serve service that serves the same directory.
+The container runs the updater immediately and then every `RUN_INTERVAL` (default `24h`). Its defaults are dry-run (`DRY_RUN=true`), checksums (`CHECKSUM=true`) and `--clean-partials`; set `DRY_RUN: "false"` once the log looks right. `/data` is the ZIM directory (mount it: without a mount every run finds an empty volume and fails with "No ZIMs found", exit 1), `/state` holds the log, the catalog cache and the last run's status. The container is unhealthy while the last run failed, which is how an outage shows up; nothing in `/data` is touched. If it cannot record a run's status in `/state`, it stops with exit 1 rather than report a stale state. `docker stop` ends a run cleanly, and an interrupted download resumes next time. The compose example also sets `LIBRARY_XML` and contains an optional kiwix-serve service that serves the same directory.
 
 One-off runs: `docker run --rm kiwix-zim-updater -h`. Arguments are passed to the script unchanged.
 
@@ -112,13 +112,14 @@ Web Download Options:
 
 ```
 
-`-v` prints the version.
+`-v` prints the version: the date and short hash of the commit, e.g. `2026.10.25+a1b2c3d`. It is read from the git clone the script runs from; `make docker-build` stamps it into the image (with a plain `docker build`, pass `--build-arg VERSION=...`). Without either it is `unknown`.
 
 ## Development
 
 ```shell
 git submodule update --init --recursive
 make lint test          # ShellCheck and the bats test suites
+make docker-build       # build the image (podman or docker)
 make docker-test        # build the image and smoke-test it offline
 make library-test       # --library end to end with real ZIMs and the official kiwix-serve
 ```

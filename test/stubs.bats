@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Self-tests for the harness: the wget/git/clear stubs and the fixtures.
+# Self-tests for the harness: the wget/git/df/kiwix-manage stubs and the fixtures.
 
 setup() {
   load 'helpers/common'
@@ -28,8 +28,8 @@ setup() {
   printf 'stale' >"$SANDBOX/out"
   run wget -q -O "$SANDBOX/out" 'https://mirror.kiwix.test/zim/nope/nope_2026-01.zim'
   assert_failure 8
-  [[ -f "$SANDBOX/out" ]]
-  [[ ! -s "$SANDBOX/out" ]]
+  assert_exists "$SANDBOX/out"
+  refute_nonempty "$SANDBOX/out"
 }
 
 @test "stubs: wget --spider reports existence via exit status only" {
@@ -57,6 +57,16 @@ setup() {
   [[ $(stat -c %s "$SANDBOX/c") -eq $(stat -c %s "$src") ]]
   run cmp -s "$SANDBOX/c" "$src"
   assert_failure
+
+  # NETFAIL: fails without creating or touching the -O file
+  printf 'keep' >"$SANDBOX/n"
+  FAKE_WGET_NETFAIL=big_test run wget -q -c -O "$SANDBOX/n" 'https://mirror.kiwix.test/zim/other/big_test_2026-03.zim'
+  assert_failure 4
+  run cat "$SANDBOX/n"
+  assert_output 'keep'
+  FAKE_WGET_NETFAIL=big_test run wget -q -O "$SANDBOX/n2" 'https://mirror.kiwix.test/zim/other/big_test_2026-03.zim'
+  assert_failure 4
+  refute_exists "$SANDBOX/n2"
 
   FAKE_WGET_META_FAIL=1 run wget -q -O - 'https://download.kiwix.test/zim/other/big_test_2026-03.zim.meta4?country='
   assert_failure 8
@@ -94,12 +104,15 @@ setup() {
   assert_output '1'
 }
 
-@test "stubs: git fails loudly by default and fakes a dev branch on request" {
+@test "stubs: git fails loudly by default, fakes a dev branch on request and always answers the version lookup" {
   run git status
   assert_failure 97
   FAKE_GIT_MODE=other-branch run git rev-parse --abbrev-ref HEAD
   assert_success
   assert_output 'dev'
+  run git -C "$SANDBOX" log -1 --format=%cd+%h
+  assert_success
+  assert_output '2026.01.02+fake123'
   run cat "$FAKE_GIT_LOG"
   assert_line 'status'
 }
@@ -124,15 +137,4 @@ setup() {
   "$SANDBOX/rebuilt/build.sh"
   run diff -r "$FIXTURES_SRC" "$SANDBOX/rebuilt"
   assert_success
-}
-
-@test "stubs: FAKE_WGET_NETFAIL fails a download without touching the -O file" {
-  printf 'keep' >"$SANDBOX/out.zim"
-  FAKE_WGET_NETFAIL=small_test run wget -q -c -O "$SANDBOX/out.zim" https://mirror.kiwix.test/zim/other/small_test_2025-12.zim
-  assert_failure 4
-  run cat "$SANDBOX/out.zim"
-  assert_output 'keep'
-  FAKE_WGET_NETFAIL=small_test run wget -q -O "$SANDBOX/new.zim" https://mirror.kiwix.test/zim/other/small_test_2025-12.zim
-  assert_failure 4
-  [[ ! -e "$SANDBOX/new.zim" ]]
 }

@@ -1,50 +1,52 @@
 #!/usr/bin/env bats
-# H8: self-update is opt-in (-U) and never touches a clone it should not.
-
-bats_require_minimum_version 1.5.0
+# Self-update: opt-in (-U), never touches a clone it should not (H8), and never moves the run files (H3).
 
 setup() {
   load 'helpers/common'
   common_setup
 }
 
-OLD_WP=wikipedia_en_test_2025-12.zim
+# assert_only_version_lookup - The only git calls were the script's read-only `log -1` for its version
+assert_only_version_lookup() {
+  assert_nonempty "$FAKE_GIT_LOG"
+  run grep -v -e ' log -1 --no-show-signature ' "$FAKE_GIT_LOG"
+  assert_output ''
+}
 
 ###############################################################################
 # Opt-in
 
-@test "H8: a default run makes no git call, even next to a .git" {
+@test "a default run makes no git call but the read-only version lookup, even next to a .git (H8)" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=current
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater "$ZIMS"
   assert_success
   assert_output --partial '1. Checking for Script Updates...'
   assert_output --partial 'Check Skipped (use -U to enable)'
-  run cat "$FAKE_GIT_LOG"
-  assert_output ''
+  assert_only_version_lookup
 }
 
-@test "H8: -u and --skip-update are still accepted and run no git" {
+@test "-u and --skip-update are still accepted and run no git but the version lookup (H8)" {
   mkdir "$SANDBOX/bin/.git"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater -u "$ZIMS"
   assert_success
+  assert_output --partial 'Check Skipped'
   run_updater --skip-update "$ZIMS"
   assert_success
-  run cat "$FAKE_GIT_LOG"
-  assert_output ''
+  assert_only_version_lookup
 }
 
-@test "H8: the usage documents -U and the -u compatibility no-op" {
+@test "the usage documents -U and the -u compatibility no-op (H8)" {
   run_updater -h
   assert_success
   assert_line '    -U, --self-update          Updates this script from its git clone before running (off by default).'
   assert_line '    -u, --skip-update          Accepted for compatibility; self-update is now off unless -U is given.'
 }
 
-@test "H8: -U outside a git clone skips the update with a message" {
-  make_local_zim "$OLD_WP"
+@test "-U outside a git clone skips the update with a message (H8)" {
+  make_local_zim "$WP_OLD"
   run_updater -U "$ZIMS"
   assert_success
   assert_output --partial 'Git Clone Not Detected: Skipping Update Check'
@@ -52,17 +54,36 @@ OLD_WP=wikipedia_en_test_2025-12.zim
   assert_output ''
 }
 
-@test "H8: --self-update on another branch skips the update" {
+@test "--self-update on another branch skips the update and keeps the run files in the run dir (H3, H8)" {
   mkdir "$SANDBOX/bin/.git"
   export FAKE_GIT_MODE=other-branch
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_updater --self-update "$ZIMS"
   assert_success
   assert_output --partial 'You appear to be on a different branch'
+  assert_exists "$RUN_DIR/download.log"
+  assert_exists "$RUN_DIR/kiwix-index"
+  refute_exists "$SANDBOX/bin/download.log"
+  refute_exists "$SANDBOX/bin/kiwix-index"
+  run download_log
+  assert_line '3. Processing ZIM(s)...'
   run cat "$FAKE_GIT_LOG"
   assert_output --partial 'rev-parse --abbrev-ref HEAD'
   refute_output --partial 'fetch'
   refute_output --partial 'pull'
+}
+
+@test "an up-to-date self-update check keeps download.log and kiwix-index in the run dir (H3)" {
+  mkdir "$SANDBOX/bin/.git"
+  export FAKE_GIT_MODE=current
+  make_local_zim "$WP_OLD"
+  run_updater -U "$ZIMS"
+  assert_success
+  assert_output --partial 'Version: Current'
+  assert_exists "$RUN_DIR/download.log"
+  assert_exists "$RUN_DIR/kiwix-index"
+  refute_exists "$SANDBOX/bin/download.log"
+  refute_exists "$SANDBOX/bin/kiwix-index"
 }
 
 ###############################################################################
@@ -123,10 +144,10 @@ sgit() {
     -c commit.gpgsign=false -c init.defaultBranch=main "$@"
 }
 
-# Publish a new script version (VER=9.9-test) to origin from another clone.
+# Publish a new commit of the script (it gains a "# v2" line) to origin from another clone.
 push_update() {
   sgit clone -q "$SANDBOX/origin.git" "$SANDBOX/dev"
-  sed -i 's/^VER=.*/VER="9.9-test"/' "$SANDBOX/dev/kiwix-zim-updater.sh"
+  echo '# v2' >>"$SANDBOX/dev/kiwix-zim-updater.sh"
   sgit -C "$SANDBOX/dev" commit -q -am 'v2'
   sgit -C "$SANDBOX/dev" push -q origin main
 }
@@ -137,23 +158,28 @@ run_clone() {
   PATH="$SANDBOX/realgit:$PATH" run bash "$CLONE_SCRIPT" "$@"
 }
 
+# version_of <repository> [<rev>] - The version the script reports for that commit
+version_of() {
+  sgit -C "$1" log -1 --no-show-signature --date=format:%Y.%m.%d --format=%cd+%h "${2:-HEAD}"
+}
+
 head_of() {
   sgit -C "$1" rev-parse "${2:-HEAD}"
 }
 
-@test "H8: -U with an update available fast-forwards, re-execs once and completes" {
+@test "-U with an update available fast-forwards, re-execs once and completes (H8)" {
   setup_clone
   push_update
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'Version: Mismatched'
   assert_output --partial 'Running the updated version'
-  assert_output --partial 'v9.9-test'
+  assert_output --partial "kiwix-zim-updater $(version_of "$SANDBOX/origin.git" main)"
   assert_equal "$(grep -c 'Update Complete' <<<"$output")" 1
   assert_equal "$(grep -c '3. Processing ZIM(s)...' <<<"$output")" 1
   assert_equal "$(head_of "$SANDBOX/clone")" "$(head_of "$SANDBOX/origin.git" main)"
-  grep -q '^VER="9.9-test"$' "$CLONE_SCRIPT"
+  grep -qx '# v2' "$CLONE_SCRIPT"
   assert_equal "$(grep -c 'pull' "$FAKE_GIT_LOG")" 1
   assert_equal "$(grep -c 'fetch' "$FAKE_GIT_LOG")" 1
   run grep 'stash' "$FAKE_GIT_LOG"
@@ -162,9 +188,9 @@ head_of() {
   assert_line '3. Processing ZIM(s)...'
 }
 
-@test "H8: -U when up to date reports Version: Current and pulls nothing" {
+@test "-U when up to date reports Version: Current and pulls nothing (H8)" {
   setup_clone
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'Version: Current'
@@ -173,18 +199,18 @@ head_of() {
   assert_output ''
 }
 
-@test "H8: -U with local changes refuses to update and never stashes" {
+@test "-U with local changes refuses to update and never stashes (H8)" {
   setup_clone
   push_update
   echo 'my local edit' >>"$SANDBOX/clone/NOTES"
   local before
   before="$(head_of "$SANDBOX/clone")"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'has local changes: Not updating'
   refute_output --partial 'Update Complete'
-  refute_output --partial 'v9.9-test'
+  refute_output --partial "kiwix-zim-updater $(version_of "$SANDBOX/origin.git" main)"
   assert_output --partial '3. Processing ZIM(s)...'
   assert_equal "$(head_of "$SANDBOX/clone")" "$before"
   run tail -n 1 "$SANDBOX/clone/NOTES"
@@ -195,24 +221,24 @@ head_of() {
   assert_output ''
 }
 
-@test "H8: -U with an untracked file in the clone refuses to update" {
+@test "-U with an untracked file in the clone refuses to update (H8)" {
   setup_clone
   push_update
   echo 'scratch' >"$SANDBOX/clone/untracked.txt"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'has local changes: Not updating'
-  [[ -f "$SANDBOX/clone/untracked.txt" ]]
+  assert_exists "$SANDBOX/clone/untracked.txt"
   run grep -E 'pull|stash' "$FAKE_GIT_LOG"
   assert_output ''
 }
 
-@test "H8: -U with a failing fetch reports it and continues with the current version" {
+@test "-U with a failing fetch reports it and continues with the current version (H8)" {
   setup_clone
   push_update
   sgit -C "$SANDBOX/clone" remote set-url origin "$SANDBOX/missing.git"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'Could not fetch updates'
@@ -225,14 +251,14 @@ head_of() {
   assert_output --partial 'Could not fetch updates'
 }
 
-@test "H8: -U with diverged local commits reports the failed fast-forward and continues" {
+@test "-U with diverged local commits reports the failed fast-forward and continues (H8)" {
   setup_clone
   push_update
   echo 'local commit' >>"$SANDBOX/clone/NOTES"
   sgit -C "$SANDBOX/clone" commit -q -am 'local'
   local before
   before="$(head_of "$SANDBOX/clone")"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_success
   assert_output --partial 'Update failed'
@@ -241,18 +267,17 @@ head_of() {
   assert_equal "$(head_of "$SANDBOX/clone")" "$before"
 }
 
-@test "H8: without -U a clone with an update available makes no git call" {
+@test "without -U a clone with an update available makes no git call but the version lookup (H8)" {
   setup_clone
   push_update
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone "$ZIMS"
   assert_success
   assert_output --partial 'Check Skipped (use -U to enable)'
-  run cat "$FAKE_GIT_LOG"
-  assert_output ''
+  assert_only_version_lookup
 }
 
-@test "R8: -U re-execs correctly when started as 'bash kiwix-zim-updater.sh' from inside the clone" {
+@test "-U re-execs correctly when started as 'bash kiwix-zim-updater.sh' from inside the clone (R8)" {
   setup_clone
   # download.log and kiwix-index land in the clone (the CWD); ignore them like the real repository does
   cp "$REPO_ROOT/.gitignore" "$SANDBOX/clone/.gitignore"
@@ -262,12 +287,12 @@ head_of() {
   push_update
   chmod a-x "$CLONE_SCRIPT"
   sgit -C "$SANDBOX/clone" config core.fileMode false
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   cd "$SANDBOX/clone" || return 1
   PATH="$SANDBOX/realgit:$PATH" run bash kiwix-zim-updater.sh -U "$ZIMS"
   assert_success
   assert_output --partial 'Running the updated version'
-  assert_output --partial 'v9.9-test'
+  assert_output --partial "kiwix-zim-updater $(version_of "$SANDBOX/origin.git" main)"
 }
 
 @test "isolation: inherited git variables and user files cannot leak into the sandbox repositories" {
@@ -283,7 +308,7 @@ head_of() {
   push_update
   # An untracked file must still be seen (the leaked ignore-everything rules would hide it) ...
   echo 'scratch' >"$SANDBOX/clone/untracked.txt"
-  make_local_zim "$OLD_WP"
+  make_local_zim "$WP_OLD"
   run_clone -U "$ZIMS"
   assert_output --partial 'local changes'
   # ... and nothing reached the decoy repository

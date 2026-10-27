@@ -7,6 +7,7 @@
 #   unhealthy (1) the last run failed, e.g. with exit 1 during an internet outage, or the status is unreadable.
 # Being unhealthy changes nothing: the ZIMs in the ZIM directory stay as they are and the next run tries again.
 
+# The same default and file name as STATUS_FILE in docker-entrypoint.sh
 status_file="${STATE_DIR:-/state}/last-run"
 
 if [[ ! -e "$status_file" ]]; then

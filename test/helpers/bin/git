@@ -7,9 +7,15 @@
 #   other-branch  `rev-parse --abbrev-ref HEAD` prints "dev", all else exits 0
 #   current       `rev-parse --abbrev-ref HEAD` prints "main", all else exits 0
 #                 (so `git diff --quiet` reports "no difference")
+# In every mode, `log -1` (the script's read-only version lookup) prints the fake version 2026.01.02+fake123.
 
 if [[ -n "${FAKE_GIT_LOG:-}" ]]; then
   printf '%s\n' "$*" >>"$FAKE_GIT_LOG"
+fi
+
+if [[ " $* " == *" log -1 "* ]]; then
+  echo "2026.01.02+fake123"
+  exit 0
 fi
 
 case "${FAKE_GIT_MODE:-}" in

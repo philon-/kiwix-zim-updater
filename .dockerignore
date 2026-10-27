@@ -1,7 +1,4 @@
-# Only kiwix-zim-updater.sh and docker/ are needed to build the image.
-.git
-.github
-test
-*.log
-kiwix-index
-zims
+# Only kiwix-zim-updater.sh and docker/ are needed to build the image: ignore everything else.
+*
+!kiwix-zim-updater.sh
+!docker/
